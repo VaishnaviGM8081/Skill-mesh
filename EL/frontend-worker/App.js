@@ -45,15 +45,18 @@ export const apiToggleStatus = async (isOnline, setIsOnline, setJobAlert) => {
 };
 
 export const apiAcceptJob = async (jobAlert, setActiveJob, setJobAlert) => {
+  // If no real job from backend, use the demo job
+  const job = jobAlert || { id: 'demo-1', customer: 'Srikanth', distance: '12 min away', price: '₹500' };
   try {
-    await fetch(`${API_URL}/api/jobs/${jobAlert.id}/accept`, {
+    await fetch(`${API_URL}/api/jobs/${job.id}/accept`, {
       method: 'POST',
     });
-    setActiveJob(jobAlert);
-    setJobAlert(null);
   } catch (e) {
-    console.error('Accept Job Error', e);
+    console.error('Accept Job Error (backend offline - demo mode)', e);
   }
+  // Always update UI regardless of backend status
+  setActiveJob(job);
+  setJobAlert(null);
 };
 
 export const apiCompleteJob = async (activeJob, setActiveJob, setIsOnline) => {

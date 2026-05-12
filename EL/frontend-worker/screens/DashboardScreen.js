@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, SafeAreaView
+  TouchableOpacity
 } from 'react-native';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
 export default function DashboardScreen({ navigation, apiState }) {
   const [isOnline, setIsOnline] = useState(true);
 
