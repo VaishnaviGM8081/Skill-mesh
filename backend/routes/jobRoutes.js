@@ -103,4 +103,20 @@ router.post('/:id/complete', async (req, res) => {
   }
 });
 
+// Analyze job description
+router.post('/analyze', async (req, res) => {
+  const { description } = req.body;
+  try {
+    const response = await fetch('http://localhost:8000/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description })
+    });
+    const data = await response.json();
+    res.json({ success: true, data, error: null });
+  } catch (error) {
+    res.status(500).json({ success: false, data: null, error: error.message });
+  }
+});
+
 module.exports = router;

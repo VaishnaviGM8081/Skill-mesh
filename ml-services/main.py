@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import spacy
 from typing import Optional, Dict
+from extractor import extract_job_details
 
 app = FastAPI(title="SkillMesh ML Services")
 
@@ -43,9 +44,21 @@ class PricingResponse(BaseModel):
     suggested_price: float
     max_price: float
 
+class ExtractRequest(BaseModel):
+    description: str
+
+class ExtractResponse(BaseModel):
+    skill: str
+    intent: str
+    urgency: str
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.post("/extract", response_model=ExtractResponse)
+def extract_endpoint(req: ExtractRequest):
+    return extract_job_details(req.description)
 
 @app.post("/parse-intent", response_model=IntentResponse)
 def parse_intent(req: IntentRequest):

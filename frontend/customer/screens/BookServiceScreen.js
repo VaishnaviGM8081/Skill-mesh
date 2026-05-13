@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, SafeAreaView, TextInput
+  TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator
 } from 'react-native';
+import { API_BASE_URL } from '../apiConfig';
 
 const workers = [
   {
@@ -29,6 +30,35 @@ export default function BookServiceScreen({ route, navigation }) {
   const service = route.params?.service || { name: 'Plumber', icon: '🔧' };
   const [description, setDescription] = useState('');
   const [selected, setSelected] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    if (description.length < 10) {
+      setAnalysis(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsAnalyzing(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/jobs/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setAnalysis(data.data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [description]);
 
   function handleBook() {
     if (!selected) return;
@@ -58,6 +88,19 @@ export default function BookServiceScreen({ route, navigation }) {
           value={description}
           onChangeText={setDescription}
         />
+
+        {/* NLP Analysis Box */}
+        {isAnalyzing && (
+           <ActivityIndicator size="small" color="#1565C0" style={{ marginBottom: 10 }} />
+        )}
+        {analysis && !isAnalyzing && (
+          <View style={styles.analysisBox}>
+            <Text style={styles.analysisTitle}>✨ Detected Details</Text>
+            <Text style={styles.analysisText}><Text style={{fontWeight:'700'}}>Skill:</Text> {analysis.skill}</Text>
+            <Text style={styles.analysisText}><Text style={{fontWeight:'700'}}>Intent:</Text> {analysis.intent}</Text>
+            <Text style={styles.analysisText}><Text style={{fontWeight:'700'}}>Urgency:</Text> {analysis.urgency}</Text>
+          </View>
+        )}
 
         {/* Location */}
         <Text style={styles.label}>Your location</Text>
@@ -142,6 +185,12 @@ const styles = StyleSheet.create({
   backText: { fontSize: 15, color: '#1565C0', fontWeight: '500' },
   title: { fontSize: 20, fontWeight: '700', color: '#1A1A2E' },
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
+  analysisBox: {
+    backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, marginBottom: 20,
+    borderWidth: 1, borderColor: '#C8E6C9'
+  },
+  analysisTitle: { fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 },
+  analysisText: { fontSize: 13, color: '#1B5E20', marginBottom: 4 },
   textArea: {
     backgroundColor: '#fff', borderRadius: 12,
     padding: 14, fontSize: 14, color: '#333',
