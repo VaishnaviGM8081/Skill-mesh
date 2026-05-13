@@ -21,7 +21,11 @@ app.use('/api/gateway', gatewayRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/admin', adminRoutes);
 
+app.get('/ping', (req, res) => {
+  res.send('pong');
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on port ${PORT} (Bound to 0.0.0.0)`);
 });

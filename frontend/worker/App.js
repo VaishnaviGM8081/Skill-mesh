@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, Alert } from 'react-native';
+import { API_URL } from './apiConfig';
 import { LanguageProvider } from './LanguageContext';
 
 // Screens
@@ -11,8 +12,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import JobAlertScreen from './screens/JobAlertScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
-// ── Real backend URL (your friend's) ──
-const API_URL = 'http://10.124.46.38:3000';
+// Real backend URL imported from apiConfig.js
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();

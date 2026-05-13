@@ -11,7 +11,7 @@ export default function Overview() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/admin/overview');
+      const res = await fetch('http://localhost:5000/api/admin/overview');
       const json = await res.json();
       if(json.success) {
         setMetrics(json.data);
