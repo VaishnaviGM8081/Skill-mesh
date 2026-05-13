@@ -3,3 +3,7 @@ node_modules
 .expo
 dist
 build
+venv/
+__pycache__/
+*.log
+.DS_Store
