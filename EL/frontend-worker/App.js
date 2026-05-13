@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, Alert } from 'react-native';
+import { LanguageProvider } from './LanguageContext';
 
 // Screens
 import LoginScreen from './screens/LoginScreen';
@@ -145,14 +146,16 @@ export default function App() {
     completeJob: () => apiCompleteJob(activeJob, setActiveJob, setIsOnline),
   };
 
-  return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Main">
-          {props => <MainTabs {...props} apiState={apiState} />}
-        </Stack.Screen>
-      </Stack.Navigator>
-    </NavigationContainer>
+   return (
+    <LanguageProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Main">
+            {props => <MainTabs {...props} apiState={apiState} />}
+          </Stack.Screen>
+        </Stack.Navigator>
+      </NavigationContainer>
+    </LanguageProvider>
   );
 }
