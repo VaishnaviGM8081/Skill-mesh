@@ -1,3 +1,3 @@
-// Central API Configuration
-export const API_BASE_URL = "http://10.176.68.129:3000";
-export const API_URL = API_BASE_URL; // Alias for compatibility
+// Values come from frontend/customer/.env (EXPO_PUBLIC_*). Restart Expo after changing .env.
+export const API_URL = process.env.EXPO_PUBLIC_API_URL;
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;

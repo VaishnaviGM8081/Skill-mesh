@@ -41,6 +41,8 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    ALTER TABLE workers ADD COLUMN IF NOT EXISTS supabase_uid UUID UNIQUE;
+
     CREATE TABLE IF NOT EXISTS worker_skills (
       worker_id INT REFERENCES workers(id) ON DELETE CASCADE,
       skill_name VARCHAR(100) NOT NULL,
@@ -56,6 +58,8 @@ async function runMigrations() {
       location geometry(Point, 4326),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS supabase_uid UUID UNIQUE;
 
     CREATE TABLE IF NOT EXISTS jobs (
       id SERIAL PRIMARY KEY,

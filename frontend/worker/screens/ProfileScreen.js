@@ -1,109 +1,187 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '../apiConfig';
+import { getAuthHeaders, clearAuthStorage } from '../lib/authFetch';
+import { supabase } from '../lib/supabase';
+
 export default function ProfileScreen() {
-  const worker = {
-    name: 'Raju Kumar',
-    phone: '+91 98765 43210',
-    trade: 'Plumber',
-    experience: '6 years',
-    languages: 'Hindi, Kannada, Telugu',
-    location: 'Bengaluru, Karnataka',
-    rating: 4.8,
-    totalJobs: 127,
-    memberSince: 'March 2022',
-  };
+  const navigation = useNavigation();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [profile, setProfile] = useState(null);
 
-  const verifications = [
-    { label: 'Phone OTP', status: 'verified' },
-    { label: 'Aadhaar ID', status: 'verified' },
-    { label: 'Selfie Check', status: 'verified' },
-    { label: 'Video Call', status: 'pending' },
-  ];
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const workerId = await SecureStore.getItemAsync('workerId');
+      if (!workerId) {
+        setError('Missing worker id');
+        setProfile(null);
+        return;
+      }
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_URL}/api/workers/${workerId}/profile`, { headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to load profile');
+      }
+      setProfile(json.data);
+    } catch (e) {
+      setError(e.message || 'Error');
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const skills = ['Pipe fitting', 'Leak repair', 'Bathroom fittings', 'Water heater', 'Drainage'];
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    await clearAuthStorage();
+    navigation.reset({ index: 0, routes: [{ name: 'PhoneAuth' }] });
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]}>
+        <ActivityIndicator size="large" color="#1565C0" />
+        <Text style={{ marginTop: 12, color: '#666' }}>Loading profile…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]}>
+        <Text style={{ color: '#C62828', textAlign: 'center', paddingHorizontal: 24 }}>{error || 'No profile'}</Text>
+        <TouchableOpacity style={[styles.editButton, { marginTop: 16 }]} onPress={load}>
+          <Text style={styles.editButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const avgRating = profile.stats?.avg_rating != null ? Number(profile.stats.avg_rating) : null;
+  const totalJobs = profile.stats?.total_jobs ?? 0;
+  const skills = Array.isArray(profile.skills) ? profile.skills : [];
+  const created = profile.created_at ? new Date(profile.created_at) : null;
+  const memberSince = created
+    ? created.toLocaleString(undefined, { month: 'long', year: 'numeric' })
+    : '—';
+
+  const initials = (profile.name || 'W')
+    .split(' ')
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container}>
-
-        {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>RK</Text>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <Text style={styles.name}>{worker.name}</Text>
-          <Text style={styles.trade}>{worker.trade} · {worker.experience}</Text>
+          <Text style={styles.name}>{profile.name}</Text>
+          <Text style={styles.trade}>
+            {profile.trade_category} · {profile.verification_level || 'unverified'}
+          </Text>
           <View style={styles.ratingRow}>
-            <Text style={styles.ratingText}>⭐ {worker.rating}</Text>
+            <Text style={styles.ratingText}>⭐ {avgRating != null ? avgRating.toFixed(1) : '—'}</Text>
             <Text style={styles.dot}>·</Text>
-            <Text style={styles.jobsText}>{worker.totalJobs} jobs</Text>
+            <Text style={styles.jobsText}>{totalJobs} jobs</Text>
             <Text style={styles.dot}>·</Text>
-            <Text style={styles.memberText}>Since {worker.memberSince}</Text>
+            <Text style={styles.memberText}>Since {memberSince}</Text>
           </View>
         </View>
 
-        {/* Trust Score */}
         <View style={styles.trustCard}>
           <View style={styles.trustLeft}>
-            <Text style={styles.trustTitle}>Trust Score</Text>
-            <Text style={styles.trustSub}>Based on ratings, ID verification and job history</Text>
+            <Text style={styles.trustTitle}>Trust</Text>
+            <Text style={styles.trustSub}>Verification level and ratings from SkillMesh</Text>
           </View>
           <View style={styles.trustBadge}>
-            <Text style={styles.trustScore}>92</Text>
-            <Text style={styles.trustMax}>/100</Text>
+            <Text style={styles.trustScore}>{String(profile.verification_level || '—').slice(0, 2).toUpperCase()}</Text>
           </View>
         </View>
 
-        {/* Verification Status */}
         <Text style={styles.sectionTitle}>Verification</Text>
         <View style={styles.card}>
-          {verifications.map((v, i) => (
-            <View key={i} style={[styles.verifyRow, i < verifications.length - 1 && styles.verifyBorder]}>
-              <Text style={styles.verifyLabel}>{v.label}</Text>
-              <View style={[styles.verifyBadge, v.status === 'verified' ? styles.verifiedBg : styles.pendingBg]}>
-                <Text style={[styles.verifyStatus, v.status === 'verified' ? styles.verifiedText : styles.pendingText]}>
-                  {v.status === 'verified' ? '✓ Verified' : '⏳ Pending'}
-                </Text>
-              </View>
+          <View style={[styles.verifyRow, styles.verifyBorder]}>
+            <Text style={styles.verifyLabel}>Phone (Supabase)</Text>
+            <View style={[styles.verifyBadge, styles.verifiedBg]}>
+              <Text style={[styles.verifyStatus, styles.verifiedText]}>✓ Signed in</Text>
             </View>
-          ))}
+          </View>
+          <View style={styles.verifyRow}>
+            <Text style={styles.verifyLabel}>Skill videos</Text>
+            <View style={[styles.verifyBadge, styles.pendingBg]}>
+              <Text style={[styles.verifyStatus, styles.pendingText]}>
+                {skills.filter((s) => s.video_url).length}/{Math.max(skills.length, 1)} uploaded
+              </Text>
+            </View>
+          </View>
         </View>
 
-        {/* Info */}
         <Text style={styles.sectionTitle}>Details</Text>
         <View style={styles.card}>
-          {[
-            { icon: '📱', label: 'Phone', value: worker.phone },
-            { icon: '📍', label: 'Location', value: worker.location },
-            { icon: '🗣️', label: 'Languages', value: worker.languages },
-          ].map((item, i) => (
-            <View key={i} style={[styles.infoRow, i < 2 && styles.verifyBorder]}>
-              <Text style={styles.infoIcon}>{item.icon}</Text>
-              <View>
-                <Text style={styles.infoLabel}>{item.label}</Text>
-                <Text style={styles.infoValue}>{item.value}</Text>
-              </View>
+          <View style={[styles.infoRow, styles.verifyBorder]}>
+            <Text style={styles.infoIcon}>📱</Text>
+            <View>
+              <Text style={styles.infoLabel}>Phone</Text>
+              <Text style={styles.infoValue}>{profile.phone}</Text>
             </View>
-          ))}
+          </View>
+          <View style={[styles.infoRow, styles.verifyBorder]}>
+            <Text style={styles.infoIcon}>📍</Text>
+            <View>
+              <Text style={styles.infoLabel}>Location (GeoJSON)</Text>
+              <Text style={styles.infoValue} numberOfLines={2}>
+                {profile.location || '—'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoIcon}>🛠️</Text>
+            <View>
+              <Text style={styles.infoLabel}>Availability</Text>
+              <Text style={styles.infoValue}>{profile.availability_status ? 'Online' : 'Offline'}</Text>
+            </View>
+          </View>
         </View>
 
-        {/* Skills */}
         <Text style={styles.sectionTitle}>Skills</Text>
         <View style={styles.skillsWrap}>
-          {skills.map((s, i) => (
-            <View key={i} style={styles.skillTag}>
-              <Text style={styles.skillText}>{s}</Text>
-            </View>
-          ))}
+          {skills.length === 0 ? (
+            <Text style={{ color: '#888' }}>No skills yet</Text>
+          ) : (
+            skills.map((s) => (
+              <View key={`${s.skill_name}`} style={styles.skillTag}>
+                <Text style={styles.skillText}>{s.skill_name}</Text>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Edit Button */}
-        <TouchableOpacity style={styles.editButton}>
-          <Text style={styles.editButtonText}>✏️  Edit Profile</Text>
+        <TouchableOpacity style={styles.editButton} onPress={handleSignOut}>
+          <Text style={styles.editButtonText}>Sign out</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -114,6 +192,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F5F7FA' },
+  center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
   container: { flex: 1, padding: 20 },
   profileHeader: {
     alignItems: 'center',
@@ -121,17 +200,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   avatar: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#1565C0',
-    justifyContent: 'center', alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 12,
   },
   avatarText: { color: '#fff', fontSize: 28, fontWeight: '700' },
   name: { fontSize: 24, fontWeight: '700', color: '#1A1A2E' },
   trade: { fontSize: 14, color: '#666', marginTop: 4 },
   ratingRow: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 6, marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
   },
   ratingText: { fontSize: 14, fontWeight: '600', color: '#1A1A2E' },
   dot: { color: '#ccc' },
@@ -139,7 +223,8 @@ const styles = StyleSheet.create({
   memberText: { fontSize: 13, color: '#666' },
   trustCard: {
     backgroundColor: '#1565C0',
-    borderRadius: 14, padding: 18,
+    borderRadius: 14,
+    padding: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -149,22 +234,28 @@ const styles = StyleSheet.create({
   trustTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
   trustSub: { fontSize: 12, color: '#90CAF9', marginTop: 4, lineHeight: 18 },
   trustBadge: {
-    flexDirection: 'row', alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
-  trustScore: { fontSize: 42, fontWeight: '700', color: '#fff' },
-  trustMax: { fontSize: 16, color: '#90CAF9', marginBottom: 6 },
+  trustScore: { fontSize: 28, fontWeight: '700', color: '#fff' },
   sectionTitle: {
-    fontSize: 16, fontWeight: '700',
-    color: '#1A1A2E', marginBottom: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 12,
   },
   card: {
-    backgroundColor: '#fff', borderRadius: 14,
-    padding: 4, marginBottom: 24,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 24,
     elevation: 2,
   },
   verifyRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
   },
   verifyBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   verifyLabel: { fontSize: 14, color: '#333' },
@@ -175,26 +266,34 @@ const styles = StyleSheet.create({
   verifiedText: { color: '#2E7D32' },
   pendingText: { color: '#F57F17' },
   infoRow: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 14, padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
   },
   infoIcon: { fontSize: 20 },
   infoLabel: { fontSize: 12, color: '#888' },
   infoValue: { fontSize: 14, color: '#1A1A2E', fontWeight: '500', marginTop: 2 },
   skillsWrap: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 10, marginBottom: 24,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 24,
   },
   skillTag: {
     backgroundColor: '#E3F2FD',
-    paddingHorizontal: 14, paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
   },
   skillText: { color: '#1565C0', fontWeight: '500', fontSize: 13 },
   editButton: {
-    backgroundColor: '#fff', borderRadius: 14,
-    padding: 16, alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#1565C0',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#1565C0',
   },
   editButtonText: { color: '#1565C0', fontSize: 16, fontWeight: '600' },
 });

@@ -1,37 +1,37 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, Alert } from 'react-native';
+import { Text, Alert, View, ActivityIndicator } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { API_URL } from './apiConfig';
 import { LanguageProvider } from './LanguageContext';
+import { getAuthHeaders } from './lib/authFetch';
 
-// Screens
-import LoginScreen from './screens/LoginScreen';
+import PhoneAuthScreen from './screens/PhoneAuthScreen';
+import OnboardingScreen from './screens/OnboardingScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import JobAlertScreen from './screens/JobAlertScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
-// Real backend URL imported from apiConfig.js
-
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// ── All real API functions from your friend's code ──
 export const apiToggleStatus = async (isOnline, setIsOnline, setJobAlert) => {
   const nextStatus = !isOnline;
   setIsOnline(nextStatus);
   try {
-    await fetch(`${API_URL}/api/workers/20/availability`, {
+    const workerId = await SecureStore.getItemAsync('workerId');
+    const headers = await getAuthHeaders();
+    await fetch(`${API_URL}/api/workers/${workerId}/availability`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ availability_status: nextStatus }),
     });
   } catch (e) {
-    console.error('Redis Sync Error', e);
+    console.error('Availability sync error', e);
   }
   if (nextStatus) {
-    // Simulate incoming job after going online (demo)
     setTimeout(() => {
       setJobAlert({
         id: '1',
@@ -46,29 +46,28 @@ export const apiToggleStatus = async (isOnline, setIsOnline, setJobAlert) => {
 };
 
 export const apiAcceptJob = async (jobAlert, setActiveJob, setJobAlert) => {
-  // If no real job from backend, use the demo job
   const job = jobAlert || { id: 'demo-1', customer: 'Srikanth', distance: '12 min away', price: '₹500' };
   try {
+    const headers = await getAuthHeaders();
     await fetch(`${API_URL}/api/jobs/${job.id}/accept`, {
       method: 'POST',
+      headers,
     });
   } catch (e) {
-    console.error('Accept Job Error (backend offline - demo mode)', e);
+    console.error('Accept Job Error', e);
   }
-  // Always update UI regardless of backend status
   setActiveJob(job);
   setJobAlert(null);
 };
 
 export const apiCompleteJob = async (activeJob, setActiveJob, setIsOnline) => {
   try {
+    const headers = await getAuthHeaders();
     await fetch(`${API_URL}/api/jobs/${activeJob.id}/complete`, {
       method: 'POST',
+      headers,
     });
-    Alert.alert(
-      'Job Completed! 🎉',
-      'Escrow funds have been successfully released to your wallet.'
-    );
+    Alert.alert('Job Completed! 🎉', 'Escrow funds have been successfully released to your wallet.');
     setActiveJob(null);
     setIsOnline(false);
   } catch (e) {
@@ -76,7 +75,6 @@ export const apiCompleteJob = async (activeJob, setActiveJob, setIsOnline) => {
   }
 };
 
-// ── Main tab navigator ──
 function MainTabs({ apiState }) {
   return (
     <Tab.Navigator
@@ -100,7 +98,7 @@ function MainTabs({ apiState }) {
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>🏠</Text>,
         }}
       >
-        {props => <DashboardScreen {...props} apiState={apiState} />}
+        {(props) => <DashboardScreen {...props} apiState={apiState} />}
       </Tab.Screen>
 
       <Tab.Screen
@@ -108,52 +106,82 @@ function MainTabs({ apiState }) {
         options={{
           tabBarLabel: 'New Job',
           tabBarIcon: () => (
-            <Text style={{ fontSize: 20 }}>
-              {apiState.jobAlert ? '🔔' : '🔕'}
-            </Text>
+            <Text style={{ fontSize: 20 }}>{apiState.jobAlert ? '🔔' : '🔕'}</Text>
           ),
         }}
       >
-        {props => <JobAlertScreen {...props} apiState={apiState} />}
+        {(props) => <JobAlertScreen {...props} apiState={apiState} />}
       </Tab.Screen>
 
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text>,
         }}
-      />
+      >
+        {(props) => <ProfileScreen {...props} />}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
 
-// ── Root app ──
 export default function App() {
-  // Shared state — passed to screens so they can call real APIs
+  const [booting, setBooting] = useState(true);
+  const [initialRoute, setInitialRoute] = useState('PhoneAuth');
+
+  const refreshRouteFromStorage = useCallback(async () => {
+    const token = await SecureStore.getItemAsync('accessToken');
+    const workerId = await SecureStore.getItemAsync('workerId');
+    if (!token) setInitialRoute('PhoneAuth');
+    else if (!workerId) setInitialRoute('Onboarding');
+    else setInitialRoute('Main');
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      await refreshRouteFromStorage();
+      setBooting(false);
+    })();
+  }, [refreshRouteFromStorage]);
+
   const [isOnline, setIsOnline] = useState(false);
   const [jobAlert, setJobAlert] = useState(null);
   const [activeJob, setActiveJob] = useState(null);
 
   const apiState = {
-    isOnline, setIsOnline,
-    jobAlert, setJobAlert,
-    activeJob, setActiveJob,
+    isOnline,
+    setIsOnline,
+    jobAlert,
+    setJobAlert,
+    activeJob,
+    setActiveJob,
     API_URL,
     toggleStatus: () => apiToggleStatus(isOnline, setIsOnline, setJobAlert),
     acceptJob: () => apiAcceptJob(jobAlert, setActiveJob, setJobAlert),
     completeJob: () => apiCompleteJob(activeJob, setActiveJob, setIsOnline),
   };
 
-   return (
+  if (booting) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F4FF' }}>
+        <ActivityIndicator size="large" color="#1565C0" />
+        <Text style={{ marginTop: 12, color: '#666' }}>Starting SkillMesh…</Text>
+      </View>
+    );
+  }
+
+  return (
     <LanguageProvider>
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Main">
-            {props => <MainTabs {...props} apiState={apiState} />}
-          </Stack.Screen>
+        <Stack.Navigator
+          key={initialRoute}
+          initialRouteName={initialRoute}
+          screenOptions={{ headerShown: false }}
+        >
+          <Stack.Screen name="PhoneAuth" component={PhoneAuthScreen} />
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen name="Main">{(props) => <MainTabs {...props} apiState={apiState} />}</Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
     </LanguageProvider>
