@@ -147,32 +147,10 @@ export default function App() {
 
   const refreshRouteFromStorage = useCallback(async () => {
     // TEMP DEV AUTH MODE
-    const DEV_MODE = true;
+    const DEV_MODE = false;
     const TEST_WORKER_UID = "11111111-1111-1111-1111-111111111111";
 
     const token = await SecureStore.getItemAsync('accessToken');
-
-    if (DEV_MODE) {
-      if (!token || token !== TEST_WORKER_UID) {
-        // No token yet — show RoleSelection to let dev set the test token
-        setInitialRoute('RoleSelection');
-        return;
-      }
-      // Token is present — go straight to Main, resolve workerId in background
-      setInitialRoute('Main');
-      // Fire-and-forget: store workerId so ProfileScreen can use it
-      fetch(`${API_URL}/api/workers/me`, {
-        headers: { 'Authorization': `Bearer ${TEST_WORKER_UID}`, 'Content-Type': 'application/json' }
-      })
-        .then(r => r.json())
-        .then(json => {
-          if (json.success && json.data?.id) {
-            SecureStore.setItemAsync('workerId', String(json.data.id));
-          }
-        })
-        .catch(() => {}); // Non-blocking — ignore if backend is down
-      return;
-    }
 
     if (!token) setInitialRoute('PhoneAuth');
     else {

@@ -25,7 +25,7 @@ const customerController = {
           .insert({ supabase_uid, name, phone });
       }
 
-      const { data, error } = await query.select().single();
+      const { data, error } = await query.select().maybeSingle();
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
@@ -41,7 +41,7 @@ const customerController = {
         .from('customers')
         .select('*')
         .eq('supabase_uid', supabase_uid)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       res.status(200).json({ success: true, data: data || null });

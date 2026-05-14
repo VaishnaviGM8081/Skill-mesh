@@ -104,22 +104,28 @@ export default function BookServiceScreen({ route, navigation }) {
         const mapped = res.workers.map((w) => {
           // ── Realistic price by trade + experience ──────────────────────────
           const BASE_RATES = {
-            plumber:       { base: 300, perYear: 30 },
-            electrician:   { base: 350, perYear: 35 },
-            carpenter:     { base: 400, perYear: 40 },
-            painter:       { base: 250, perYear: 25 },
+            plumber: { base: 300, perYear: 30 },
+            electrician: { base: 350, perYear: 35 },
+            carpenter: { base: 400, perYear: 40 },
+            painter: { base: 250, perYear: 25 },
             ac_technician: { base: 500, perYear: 50 },
-            cleaner:       { base: 200, perYear: 15 },
-            cook:          { base: 300, perYear: 25 },
-            gardener:      { base: 200, perYear: 20 },
-            driver:        { base: 250, perYear: 20 },
-            security:      { base: 300, perYear: 15 },
+            cleaner: { base: 200, perYear: 15 },
+            cook: { base: 300, perYear: 25 },
+            gardener: { base: 200, perYear: 20 },
+            driver: { base: 250, perYear: 20 },
+            security: { base: 300, perYear: 15 },
           };
           const trade = w.trade_category?.toLowerCase() || 'plumber';
           const rate = BASE_RATES[trade] || { base: 300, perYear: 25 };
           // Add experience premium + small unique variance per worker id
-          const variance = (w.id % 5) * 25; // 0, 25, 50, 75, or 100
-          const rawPrice = rate.base + (w.years_experience * rate.perYear) + variance;
+          const workerId = Number(w.id) || 1;
+          const variance = (workerId % 5) * 25; // 0, 25, 50, 75, or 100
+          const exp = Number(w.years_experience) || 1;
+
+          const rawPrice =
+            rate.base +
+            (exp * rate.perYear) +
+            variance;
           // Round to nearest ₹50 for clean look
           const price = `₹${Math.round(rawPrice / 50) * 50}`;
 
@@ -249,7 +255,7 @@ export default function BookServiceScreen({ route, navigation }) {
     try {
       // ── Get Supabase session token (Customer App uses Supabase auth) ──
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       // DEV MODE BYPASS: If no session exists, use the DEV customer token
       const DEV_CUSTOMER_UID = '0ba38fa3-1ab4-405e-884d-1c43d3721680';
       const token = session?.access_token || DEV_CUSTOMER_UID;
@@ -258,7 +264,9 @@ export default function BookServiceScreen({ route, navigation }) {
       const ensureRes = await fetch(`${API_BASE_URL}/api/customers/ensure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ phone: session.user?.phone || session.user?.email || 'unknown' }),
+        body: JSON.stringify({
+          phone: session?.user?.phone || session?.user?.email || 'guest-user',
+        }),
       });
       // Non-blocking — if this endpoint doesn't exist yet, we proceed anyway
       if (!ensureRes.ok) console.warn('Customer ensure endpoint not available, proceeding...');
@@ -280,10 +288,20 @@ export default function BookServiceScreen({ route, navigation }) {
         }),
       });
 
-      const data = await res.json();
+      let data;
+
+      try {
+        data = await res.json();
+      } catch (e) {
+        Alert.alert('Booking Failed', 'Invalid backend response');
+        return;
+      }
 
       if (!data.success) {
-        Alert.alert('Booking Failed', data.error || 'Could not create job. Please try again.');
+        Alert.alert(
+          'Booking Failed',
+          data.error || 'Could not create job. Please try again.'
+        );
         return;
       }
 
@@ -531,8 +549,8 @@ export default function BookServiceScreen({ route, navigation }) {
           {isBooking
             ? <ActivityIndicator color="#fff" />
             : <Text style={styles.bookButtonText}>
-                {selected ? `Book ${selected.name} →` : 'Select a worker to book'}
-              </Text>
+              {selected ? `Book ${selected.name} →` : 'Select a worker to book'}
+            </Text>
           }
         </TouchableOpacity>
 

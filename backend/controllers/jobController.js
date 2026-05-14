@@ -48,7 +48,7 @@ const jobController = {
           workers ( name, trade_category, average_rating, phone ),
           customers ( name, phone )
         `)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       res.status(201).json({ success: true, data });
@@ -77,11 +77,11 @@ const jobController = {
       if (jobErr) throw jobErr;
       if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
       if (job.status !== 'completed') return res.status(400).json({ success: false, error: 'Can only rate completed jobs' });
-      
+
       let reqs = {};
       try {
         reqs = JSON.parse(job.additional_requirements || '{}');
-      } catch (e) {}
+      } catch (e) { }
 
       if (reqs.customer_rating) {
         return res.status(400).json({ success: false, error: 'Job already rated' });
@@ -210,7 +210,7 @@ const jobController = {
         .update({ status })
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
@@ -236,7 +236,7 @@ const jobController = {
           )
         `)
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
@@ -259,10 +259,10 @@ const jobController = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ description })
         });
-        
+
         if (mlRes.ok) {
-           const data = await mlRes.json();
-           return res.json({ success: true, data: data.data || data });
+          const data = await mlRes.json();
+          return res.json({ success: true, data: data.data || data });
         }
       } catch (err) {
         console.warn('ML Service unreachable, falling back to mock logic:', err.message);

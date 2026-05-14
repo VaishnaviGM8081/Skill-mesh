@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -19,6 +21,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [profile, setProfile] = useState(null);
+  const [workerPincode, setWorkerPincode] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +59,10 @@ export default function ProfileScreen() {
 
       if (!json.success) throw new Error(json.error || 'Failed to load profile');
       setProfile(json.data);
+
+      if (json.data?.pincode) {
+        setWorkerPincode(String(json.data.pincode));
+      }
     } catch (e) {
       setError(e.message || 'Error');
       setProfile(null);
@@ -69,12 +76,62 @@ export default function ProfileScreen() {
       load();
     }, [load])
   );
+  async function savePincode() {
+    try {
+      const headers = await getAuthHeaders();
+
+      const workerId = await SecureStore.getItemAsync('workerId');
+
+      const res = await fetch(
+        `${API_URL}/api/workers/${workerId}/pincode`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...headers,
+          },
+          body: JSON.stringify({
+            pincode: workerPincode,
+          }),
+        }
+      );
+
+      const json = await res.json();
+
+      if (!json.success) {
+        throw new Error(json.error || 'Failed');
+      }
+
+      Alert.alert('Success', 'Pincode updated');
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
+  }
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
-    await clearAuthStorage();
-    // Route to RoleSelection (works in both DEV and production modes)
-    navigation.reset({ index: 0, routes: [{ name: 'RoleSelection' }] });
+    try {
+
+      // Supabase logout
+      await supabase.auth.signOut();
+
+      // Clear secure storage
+      await clearAuthStorage();
+
+      // Remove cached worker data
+      await SecureStore.deleteItemAsync('workerId');
+
+      // Reset local profile state
+      setProfile(null);
+
+      // Navigate to onboarding/login flow
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'RoleSelection' }],
+      });
+
+    } catch (e) {
+      Alert.alert('Error', 'Failed to sign out');
+    }
   }
 
   if (loading) {
@@ -198,23 +255,43 @@ export default function ProfileScreen() {
           </View>
           <View style={[styles.infoRow, styles.verifyBorder]}>
             <Text style={styles.infoIcon}>📍</Text>
+
             <View style={{ flex: 1 }}>
-              <Text style={styles.infoLabel}>Location</Text>
-              <Text style={styles.infoValue}>
-                {(() => {
-                  const loc = profile.location;
-                  if (!loc) return '—';
-                  // Parse GeoJSON Point and show readable coordinates
-                  try {
-                    const parsed = typeof loc === 'string' ? JSON.parse(loc) : loc;
-                    if (parsed?.coordinates) {
-                      const [lng, lat] = parsed.coordinates;
-                      return `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-                    }
-                  } catch (_) {}
-                  return String(loc);
-                })()}
-              </Text>
+              <Text style={styles.infoLabel}>Pincode</Text>
+
+              <TextInput
+                value={workerPincode}
+                onChangeText={setWorkerPincode}
+                keyboardType="numeric"
+                maxLength={6}
+                placeholder="Enter pincode"
+                style={{
+                  fontSize: 16,
+                  color: '#1A1A2E',
+                  fontWeight: '600',
+                  marginTop: 4,
+                }}
+              />
+
+              <TouchableOpacity
+                onPress={savePincode}
+                style={{
+                  marginTop: 10,
+                  backgroundColor: '#1565C0',
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontWeight: '700',
+                  }}
+                >
+                  Save Pincode
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
           <View style={styles.infoRow}>

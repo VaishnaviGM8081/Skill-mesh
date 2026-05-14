@@ -15,6 +15,7 @@ import {
 import { API_URL } from '../apiConfig';
 import { getAuthHeaders } from '../lib/authFetch';
 import * as SecureStore from 'expo-secure-store';
+import * as Location from 'expo-location';
 
 const TRADES = [
   { key: 'plumber', label: '🔧 Plumber' },
@@ -49,6 +50,74 @@ export default function OnboardingScreen({ navigation }) {
   const removeSkill = (index) => {
     setSkills(skills.filter((_, i) => i !== index));
   };
+  const verifyPincode = async (enteredPincode) => {
+
+    try {
+
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+
+        Alert.alert(
+          'Location Permission Required',
+          'Please allow location access.'
+        );
+
+        return false;
+      }
+
+      const location =
+        await Location.getCurrentPositionAsync({});
+
+      const reverseGeocode =
+        await Location.reverseGeocodeAsync({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+
+      if (reverseGeocode.length > 0) {
+
+        const detectedPincode =
+          reverseGeocode[0].postalCode;
+
+        console.log(
+          'Detected Pincode:',
+          detectedPincode
+        );
+
+        if (
+          detectedPincode !== enteredPincode.trim()
+        ) {
+
+          Alert.alert(
+            'Location Mismatch',
+            `You are currently at pincode ${detectedPincode}`
+          );
+
+          return false;
+        }
+
+        return true;
+      }
+
+      Alert.alert(
+        'Could not detect location'
+      );
+
+      return false;
+
+    } catch (err) {
+
+      console.log(err);
+
+      Alert.alert(
+        'Location verification failed'
+      );
+
+      return false;
+    }
+  };
 
   async function handleSubmit() {
     if (!name.trim() || !phone.trim() || !experience.trim() || !pincode.trim()) {
@@ -56,6 +125,13 @@ export default function OnboardingScreen({ navigation }) {
       return;
     }
     setLoading(true);
+    const verified =
+      await verifyPincode(pincode);
+
+    if (!verified) {
+      setLoading(false);
+      return;
+    }
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${API_URL}/api/workers/profile`, {

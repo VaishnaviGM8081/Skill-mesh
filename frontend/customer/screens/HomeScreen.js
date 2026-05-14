@@ -6,26 +6,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { API_BASE_URL } from '../apiConfig';
+import * as Location from 'expo-location';
 
 const services = [
-  { id: 1, name: 'Plumber',     icon: '🔧', workers: 24, avgPrice: '₹400–600' },
+  { id: 1, name: 'Plumber', icon: '🔧', workers: 24, avgPrice: '₹400–600' },
   { id: 2, name: 'Electrician', icon: '⚡', workers: 18, avgPrice: '₹350–550' },
-  { id: 3, name: 'Carpenter',   icon: '🪚', workers: 12, avgPrice: '₹500–800' },
-  { id: 4, name: 'Painter',     icon: '🖌️', workers: 9,  avgPrice: '₹600–1200' },
-  { id: 5, name: 'Cleaner',     icon: '🧹', workers: 20, avgPrice: '₹250–400' },
-  { id: 6, name: 'Mechanic',    icon: '🔩', workers: 15, avgPrice: '₹400–700' },
+  { id: 3, name: 'Carpenter', icon: '🪚', workers: 12, avgPrice: '₹500–800' },
+  { id: 4, name: 'Painter', icon: '🖌️', workers: 9, avgPrice: '₹600–1200' },
+  { id: 5, name: 'Cleaner', icon: '🧹', workers: 20, avgPrice: '₹250–400' },
+  { id: 6, name: 'Mechanic', icon: '🔩', workers: 15, avgPrice: '₹400–700' },
 ];
 
 const TRADE_ICONS = { plumber: '🔧', electrician: '⚡', carpenter: '🪚', painter: '🖌️', cleaner: '🧹', cook: '🍳', gardener: '🌿', mechanic: '🔩' };
 
 export default function HomeScreen({ navigation, apiState }) {
-  const [search, setSearch]               = useState('');
+  const [search, setSearch] = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
-  const [user, setUser]                   = useState(null);
-  const [recentJobs, setRecentJobs]       = useState([]);
+  const [user, setUser] = useState(null);
+  const [recentJobs, setRecentJobs] = useState([]);
+  const [locationName, setLocationName] = useState('Detecting location...');
 
   useEffect(() => {
     loadUser();
+    getLocation();
   }, []);
 
   const loadUser = async () => {
@@ -33,6 +36,48 @@ export default function HomeScreen({ navigation, apiState }) {
     if (session?.user) {
       setUser(session.user);
       fetchRecentJobs(session.access_token);
+    }
+  };
+  const getLocation = async () => {
+    try {
+
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        setLocationName('Location denied');
+        return;
+      }
+
+      const location =
+        await Location.getCurrentPositionAsync({});
+
+      const reverseGeocode =
+        await Location.reverseGeocodeAsync({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+
+      if (reverseGeocode.length > 0) {
+
+        const area =
+          reverseGeocode[0].district ||
+          reverseGeocode[0].subregion ||
+          reverseGeocode[0].city ||
+          'Unknown Area';
+
+        const city =
+          reverseGeocode[0].city ||
+          'Bengaluru';
+
+        setLocationName(`${area}, ${city}`);
+      }
+
+    } catch (err) {
+
+      console.log(err);
+
+      setLocationName('Location unavailable');
     }
   };
 
@@ -80,7 +125,9 @@ export default function HomeScreen({ navigation, apiState }) {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.location}>📍 Pattanagere, Bengaluru</Text>
+            <Text style={styles.location}>
+              📍 {locationName}
+            </Text>
             <Text style={styles.title}>What do you need?</Text>
           </View>
           <TouchableOpacity

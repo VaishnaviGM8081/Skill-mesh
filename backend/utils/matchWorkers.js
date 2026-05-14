@@ -9,9 +9,9 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c; // Distance in km
   return distance;
@@ -22,7 +22,19 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
     // 1. Query available workers from Supabase instead of local pg
     const { data: workers, error } = await supabase
       .from('workers')
-      .select('id, name, trade_category, availability_status, trust_score, pincode, average_rating, years_experience, completed_jobs')
+      .select(`
+  id,
+  name,
+  trade_category,
+  availability_status,
+  trust_score,
+  pincode,
+  latitude,
+  longitude,
+  average_rating,
+  years_experience,
+  completed_jobs
+`)
       .eq('availability_status', true);
 
     if (error) throw error;
@@ -69,7 +81,7 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
           if (worker.pincode === customerPincode) {
             // Assume 5km average distance for same pincode
             distance_km = 5;
-            distance_score = 0.8; 
+            distance_score = 0.8;
           } else {
             // Assume 15km+ for different pincode
             distance_km = 15;
@@ -88,7 +100,11 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
           id: worker.id,
           name: worker.name,
           trade_category: worker.trade_category,
-          distance_km: distance_km !== null ? Number(distance_km.toFixed(1)) : null,
+          distance_km:
+            distance_km != null &&
+              !isNaN(distance_km)
+              ? Number(distance_km.toFixed(1))
+              : null,
           trust_score: trust_score,
           match_score: Number(match_score.toFixed(2)),
           average_rating: worker.average_rating || null,
