@@ -13,6 +13,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import JobAlertScreen from './screens/JobAlertScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import RoleSelectionScreen from './screens/RoleSelectionScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -21,55 +22,51 @@ export const apiToggleStatus = async (isOnline, setIsOnline, setJobAlert) => {
   const nextStatus = !isOnline;
   setIsOnline(nextStatus);
   try {
-    const workerId = await SecureStore.getItemAsync('workerId');
     const headers = await getAuthHeaders();
-    await fetch(`${API_URL}/api/workers/${workerId}/availability`, {
-      method: 'PATCH',
+    await fetch(`${API_URL}/api/workers/profile`, {
+      method: 'POST',
       headers,
       body: JSON.stringify({ availability_status: nextStatus }),
     });
   } catch (e) {
     console.error('Availability sync error', e);
   }
-  if (nextStatus) {
-    setTimeout(() => {
-      setJobAlert({
-        id: '1',
-        customer: 'Srikanth',
-        distance: '12 min away',
-        price: '₹500',
-      });
-    }, 3000);
-  } else {
-    setJobAlert(null);
-  }
 };
 
 export const apiAcceptJob = async (jobAlert, setActiveJob, setJobAlert) => {
-  const job = jobAlert || { id: 'demo-1', customer: 'Srikanth', distance: '12 min away', price: '₹500' };
+  if (!jobAlert) return;
   try {
     const headers = await getAuthHeaders();
-    await fetch(`${API_URL}/api/jobs/${job.id}/accept`, {
-      method: 'POST',
+    const res = await fetch(`${API_URL}/api/jobs/${jobAlert.id}/status`, {
+      method: 'PATCH',
       headers,
+      body: JSON.stringify({ status: 'in_progress' })
     });
+    const data = await res.json();
+    if (data.success) {
+      setActiveJob(data.data);
+      setJobAlert(null);
+    }
   } catch (e) {
     console.error('Accept Job Error', e);
   }
-  setActiveJob(job);
-  setJobAlert(null);
 };
 
 export const apiCompleteJob = async (activeJob, setActiveJob, setIsOnline) => {
+  if (!activeJob) return;
   try {
     const headers = await getAuthHeaders();
-    await fetch(`${API_URL}/api/jobs/${activeJob.id}/complete`, {
-      method: 'POST',
+    const res = await fetch(`${API_URL}/api/jobs/${activeJob.id}/status`, {
+      method: 'PATCH',
       headers,
+      body: JSON.stringify({ status: 'completed' })
     });
-    Alert.alert('Job Completed! 🎉', 'Escrow funds have been successfully released to your wallet.');
-    setActiveJob(null);
-    setIsOnline(false);
+    const data = await res.json();
+    if (data.success) {
+      Alert.alert('Job Completed! 🎉', 'Job has been successfully marked as completed.');
+      setActiveJob(null);
+      setIsOnline(false);
+    }
   } catch (e) {
     console.error('Complete Job Error', e);
   }
@@ -131,11 +128,41 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState('PhoneAuth');
 
   const refreshRouteFromStorage = useCallback(async () => {
+    // TEMP DEV AUTH MODE
+    const DEV_MODE = true;
+    const TEST_WORKER_UID = "11111111-1111-1111-1111-111111111111";
+
     const token = await SecureStore.getItemAsync('accessToken');
-    const workerId = await SecureStore.getItemAsync('workerId');
+
+    if (DEV_MODE) {
+      if (!token || token !== TEST_WORKER_UID) {
+        setInitialRoute('RoleSelection');
+        return;
+      }
+      
+      try {
+        const headers = { 'Authorization': `Bearer ${TEST_WORKER_UID}` };
+        const res = await fetch(`${API_URL}/api/workers/me`, { headers });
+        const json = await res.json();
+        
+        if (json.success && json.data) {
+          await SecureStore.setItemAsync('workerId', String(json.data.id));
+          setInitialRoute('Main');
+        } else {
+          setInitialRoute('Onboarding');
+        }
+      } catch (e) {
+        setInitialRoute('RoleSelection');
+      }
+      return;
+    }
+
     if (!token) setInitialRoute('PhoneAuth');
-    else if (!workerId) setInitialRoute('Onboarding');
-    else setInitialRoute('Main');
+    else {
+      const workerId = await SecureStore.getItemAsync('workerId');
+      if (!workerId) setInitialRoute('Onboarding');
+      else setInitialRoute('Main');
+    }
   }, []);
 
   useEffect(() => {
@@ -148,6 +175,25 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(false);
   const [jobAlert, setJobAlert] = useState(null);
   const [activeJob, setActiveJob] = useState(null);
+
+  useEffect(() => {
+    let interval;
+    if (isOnline && !activeJob && !jobAlert) {
+      interval = setInterval(async () => {
+        try {
+          const headers = await getAuthHeaders();
+          const res = await fetch(`${API_URL}/api/jobs/worker`, { headers });
+          const json = await res.json();
+          if (json.success && json.data.length > 0) {
+            setJobAlert(json.data[0]); // Show first pending job
+          }
+        } catch (e) {
+          console.error('Job polling error', e);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isOnline, activeJob, jobAlert]);
 
   const apiState = {
     isOnline,
@@ -179,6 +225,7 @@ export default function App() {
           initialRouteName={initialRoute}
           screenOptions={{ headerShown: false }}
         >
+          <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
           <Stack.Screen name="PhoneAuth" component={PhoneAuthScreen} />
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           <Stack.Screen name="Main">{(props) => <MainTabs {...props} apiState={apiState} />}</Stack.Screen>

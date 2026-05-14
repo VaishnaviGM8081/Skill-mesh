@@ -7,16 +7,7 @@ import {
 export default function JobAlertScreen({ apiState }) {
   const [status, setStatus] = useState('pending'); // pending | accepted | rejected
 
-  const job = {
-    customerName: 'Rahul Sharma',
-    service: 'Plumbing',
-    description: 'Pipe leakage under kitchen sink. Water dripping since morning.',
-    address: '14B, 3rd Cross, Koramangala, Bengaluru',
-    distance: '2.3 km away',
-    estimatedPay: '₹450 - ₹600',
-    urgency: 'Urgent',
-    postedTime: '2 mins ago',
-  };
+  const job = apiState?.jobAlert;
 
   function handleAccept() {
   if (apiState?.acceptJob) {
@@ -31,17 +22,27 @@ export default function JobAlertScreen({ apiState }) {
     Alert.alert('Job Rejected', 'You will be shown the next available job.');
   }
 
+  if (!job) {
+    return (
+      <View style={styles.resultContainer}>
+        <Text style={styles.resultEmoji}>📡</Text>
+        <Text style={styles.resultTitle}>Waiting for jobs...</Text>
+        <Text style={styles.resultSub}>Stay online to receive new service requests near you.</Text>
+      </View>
+    );
+  }
+
   if (status === 'accepted') {
     return (
       <View style={styles.resultContainer}>
         <Text style={styles.resultEmoji}>✅</Text>
         <Text style={styles.resultTitle}>Job Accepted!</Text>
         <Text style={styles.resultSub}>
-          Head to {job.address}. {'\n'}Customer is waiting.
+          Head to the customer address. {'\n'}Customer is waiting.
         </Text>
         <View style={styles.earningsBox}>
-          <Text style={styles.earningsLabel}>Estimated earnings</Text>
-          <Text style={styles.earningsAmount}>{job.estimatedPay}</Text>
+          <Text style={styles.earningsLabel}>Job Status</Text>
+          <Text style={styles.earningsAmount}>In Progress</Text>
         </View>
       </View>
     );
@@ -98,22 +99,22 @@ export default function JobAlertScreen({ apiState }) {
         {/* Details */}
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>👤</Text>
-          <Text style={styles.detailText}>{job.customerName}</Text>
+          <Text style={styles.detailText}>{job.customers?.name || 'Customer'}</Text>
         </View>
 
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>📍</Text>
-          <Text style={styles.detailText}>{job.address}</Text>
+          <Text style={styles.detailText}>{job.customers?.address || job.pincode}</Text>
         </View>
 
         <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>🗺️</Text>
-          <Text style={styles.detailText}>{job.distance}</Text>
+          <Text style={styles.detailIcon}>📝</Text>
+          <Text style={styles.detailText}>{job.notes || 'No notes provided'}</Text>
         </View>
 
         <View style={styles.detailRow}>
           <Text style={styles.detailIcon}>💰</Text>
-          <Text style={[styles.detailText, styles.payText]}>{job.estimatedPay}</Text>
+          <Text style={[styles.detailText, styles.payText]}>Fixed Price</Text>
         </View>
 
       </View>
