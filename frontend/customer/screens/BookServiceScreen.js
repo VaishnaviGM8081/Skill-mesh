@@ -5,25 +5,53 @@ import {
 } from 'react-native';
 import { API_BASE_URL } from '../apiConfig';
 
-  const [workers, setWorkers] = useState([]);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    async function fetchWorkers() {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/workers/search?query=${service.name}`);
-        const data = await res.json();
-        if (data.success) {
-          setWorkers(data.data);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+export default function BookServiceScreen({ route, navigation }) {
+  const service = route.params?.service || { name: 'Plumber', icon: '🔧' };
+  const [description, setDescription] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [workers, setWorkers] = useState([]);
+  const [isLoadingWorkers, setIsLoadingWorkers] = useState(false);
+
+  // Default hardcoded customer location for demo
+  const customerLocation = { latitude: 12.97, longitude: 77.59, pincode: '560001' };
+
+  async function fetchMatchedWorkers(skillToMatch) {
+    setIsLoadingWorkers(true);
+    try {
+      // Use standard fetch instead of authFetch so testing works without logging in
+      const rawRes = await fetch(
+        `${API_BASE_URL}/api/jobs/match-workers?latitude=${customerLocation.latitude}&longitude=${customerLocation.longitude}&skill=${skillToMatch}&pincode=${customerLocation.pincode}`,
+        { method: 'GET' }
+      );
+      const res = await rawRes.json();
+      if (res.success) {
+        // Map backend format to frontend format
+        const mapped = res.workers.map(w => ({
+          id: w.id,
+          name: w.name,
+          rating: (w.trust_score * 5).toFixed(1), // estimate rating from trust score
+          jobs: Math.floor(Math.random() * 100) + 10, // mock jobs
+          distance: `${w.distance_km} km`,
+          price: '₹500', // mock price
+          eta: `${Math.ceil(w.distance_km * 5 + 10)} min`, // 5 min per km + 10 min prep
+          verified: w.trust_score > 0.8,
+          badge: w.match_score > 0.9 ? 'Best Match' : null,
+        }));
+        setWorkers(mapped);
       }
+    } catch (err) {
+      console.error('Failed to fetch matched workers', err);
+    } finally {
+      setIsLoadingWorkers(false);
     }
-    fetchWorkers();
+  }
+
+  // Fetch workers when screen loads or service changes
+  useEffect(() => {
+    fetchMatchedWorkers(service.name);
   }, [service.name]);
 
   useEffect(() => {
@@ -42,6 +70,10 @@ import { API_BASE_URL } from '../apiConfig';
         const data = await res.json();
         if (data.success) {
           setAnalysis(data.data);
+          // Auto-fetch new workers if NLP suggests a different skill
+          if (data.data.skill && data.data.skill !== service.name) {
+             fetchMatchedWorkers(data.data.skill);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -53,26 +85,9 @@ import { API_BASE_URL } from '../apiConfig';
     return () => clearTimeout(timer);
   }, [description]);
 
-  async function handleBook() {
+  function handleBook() {
     if (!selected) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/jobs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          worker_id: selected.id,
-          pincode: '560034', // Demo pincode
-          notes: description
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        navigation.navigate('JobTracking', { worker: selected, service, jobId: data.data.id });
-      }
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Booking Failed', 'Unable to send service request.');
-    }
+    navigation.navigate('JobTracking', { worker: selected, service });
   }
 
   return (
@@ -130,45 +145,52 @@ import { API_BASE_URL } from '../apiConfig';
 
         {/* Worker List */}
         <Text style={styles.label}>Available Workers</Text>
-        {workers.map((worker) => (
-          <TouchableOpacity
-            key={worker.id}
-            style={[styles.workerCard, selected?.id === worker.id && styles.workerSelected]}
-            onPress={() => setSelected(worker)}
-          >
-            {worker.badge && (
-              <View style={styles.topBadge}>
-                <Text style={styles.topBadgeText}>🏆 {worker.badge}</Text>
-              </View>
-            )}
-            <View style={styles.workerRow}>
-              <View style={styles.workerAvatar}>
-                <Text style={styles.workerAvatarText}>
-                  {worker.name.split(' ').map(n => n[0]).join('')}
-                </Text>
-              </View>
-              <View style={styles.workerInfo}>
-                <View style={styles.workerNameRow}>
-                  <Text style={styles.workerName}>{worker.name}</Text>
-                  {worker.verified && <Text style={styles.verifiedBadge}>✓ Verified</Text>}
+
+        {isLoadingWorkers ? (
+          <ActivityIndicator size="large" color="#1565C0" style={{ marginTop: 20 }} />
+        ) : workers.length === 0 ? (
+          <Text style={{ textAlign: 'center', marginTop: 20, color: '#666' }}>No matching workers found near you.</Text>
+        ) : (
+          workers.map((worker) => (
+            <TouchableOpacity
+              key={worker.id}
+              style={[styles.workerCard, selected?.id === worker.id && styles.workerSelected]}
+              onPress={() => setSelected(worker)}
+            >
+              {worker.badge && (
+                <View style={styles.topBadge}>
+                  <Text style={styles.topBadgeText}>🏆 {worker.badge}</Text>
                 </View>
-                <Text style={styles.workerStats}>
-                  ⭐ {worker.rating} · {worker.jobs} jobs · {worker.distance}
-                </Text>
-                <Text style={styles.workerEta}>🕐 Arrives in {worker.eta}</Text>
+              )}
+              <View style={styles.workerRow}>
+                <View style={styles.workerAvatar}>
+                  <Text style={styles.workerAvatarText}>
+                    {worker.name ? worker.name.split(' ').map(n => n[0]).join('').substring(0, 2) : 'W'}
+                  </Text>
+                </View>
+                <View style={styles.workerInfo}>
+                  <View style={styles.workerNameRow}>
+                    <Text style={styles.workerName}>{worker.name}</Text>
+                    {worker.verified && <Text style={styles.verifiedBadge}>✓ Verified</Text>}
+                  </View>
+                  <Text style={styles.workerStats}>
+                    ⭐ {worker.rating} · {worker.jobs} jobs · {worker.distance}
+                  </Text>
+                  <Text style={styles.workerEta}>🕐 Arrives in {worker.eta}</Text>
+                </View>
+                <View style={styles.workerPrice}>
+                  <Text style={styles.priceText}>{worker.price}</Text>
+                  <Text style={styles.priceLabel}>est.</Text>
+                </View>
               </View>
-              <View style={styles.workerPrice}>
-                <Text style={styles.priceText}>{worker.price}</Text>
-                <Text style={styles.priceLabel}>est.</Text>
-              </View>
-            </View>
-            {selected?.id === worker.id && (
-              <View style={styles.selectedTick}>
-                <Text style={styles.selectedTickText}>✓ Selected</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
+              {selected?.id === worker.id && (
+                <View style={styles.selectedTick}>
+                  <Text style={styles.selectedTickText}>✓ Selected</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))
+        )}
 
         {/* Book Button */}
         <TouchableOpacity
