@@ -21,8 +21,6 @@ const TRADES = [
   { key: 'electrician', label: 'Electrician' },
   { key: 'carpenter', label: 'Carpenter' },
   { key: 'painter', label: 'Painter' },
-  { key: 'mechanic', label: 'Mechanic' },
-  { key: 'ac_service', label: 'AC Service' },
 ];
 
 export default function OnboardingScreen({ navigation }) {

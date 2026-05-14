@@ -134,38 +134,8 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState('PhoneAuth');
 
   const refreshRouteFromStorage = useCallback(async () => {
-    // TEMP DEV AUTH MODE
-    const DEV_MODE = true;
-    const TEST_CUSTOMER_UID = "22222222-2222-2222-2222-222222222222";
-
-    const token = await SecureStore.getItemAsync('accessToken');
-
-    if (DEV_MODE) {
-      if (!token || token !== TEST_CUSTOMER_UID) {
-        setInitialRoute('RoleSelection');
-        return;
-      }
-    } else {
-      if (!token) {
-        setInitialRoute('PhoneAuth');
-        return;
-      }
-    }
-
-    try {
-      const headers = await getAuthHeaders();
-      const me = await fetch(`${API_URL}/api/customers/me`, { headers });
-      const meJson = await me.json().catch(() => ({}));
-      if (me.status === 404 || !meJson.data) {
-        setInitialRoute('Onboarding');
-      } else {
-        await SecureStore.setItemAsync('customerId', String(meJson.data.id));
-        setInitialRoute('Main');
-      }
-    } catch (e) {
-      console.error('Customer profile check error:', e);
-      setInitialRoute('RoleSelection');
-    }
+    // TEMPORARILY BYPASSED AUTHENTICATION FOR TESTING
+    setInitialRoute('Main');
   }, []);
 
   useEffect(() => {

@@ -15,31 +15,38 @@ export default function BookServiceScreen({ route, navigation }) {
   const [workers, setWorkers] = useState([]);
   const [isLoadingWorkers, setIsLoadingWorkers] = useState(false);
 
-  // Default hardcoded customer location for demo
-  const customerLocation = { latitude: 12.97, longitude: 77.59, pincode: '560001' };
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [customerPincode, setCustomerPincode] = useState('560001');
+
+  // Customer location state (lat/lng null means fallback to pincode matching)
+  const customerLocation = { latitude: null, longitude: null, pincode: customerPincode };
 
   async function fetchMatchedWorkers(skillToMatch) {
     setIsLoadingWorkers(true);
     try {
-      // Use standard fetch instead of authFetch so testing works without logging in
+      // Normalize skill to lowercase for API query (DB stores lowercase)
+      const skillQuery = skillToMatch.toLowerCase();
       const rawRes = await fetch(
-        `${API_BASE_URL}/api/jobs/match-workers?latitude=${customerLocation.latitude}&longitude=${customerLocation.longitude}&skill=${skillToMatch}&pincode=${customerLocation.pincode}`,
+        `${API_BASE_URL}/api/jobs/match-workers?skill=${skillQuery}&pincode=${customerLocation.pincode}`,
         { method: 'GET' }
       );
       const res = await rawRes.json();
       if (res.success) {
-        // Map backend format to frontend format
-        const mapped = res.workers.map(w => ({
-          id: w.id,
-          name: w.name,
-          rating: (w.trust_score * 5).toFixed(1), // estimate rating from trust score
-          jobs: Math.floor(Math.random() * 100) + 10, // mock jobs
-          distance: `${w.distance_km} km`,
-          price: '₹500', // mock price
-          eta: `${Math.ceil(w.distance_km * 5 + 10)} min`, // 5 min per km + 10 min prep
-          verified: w.trust_score > 0.8,
-          badge: w.match_score > 0.9 ? 'Best Match' : null,
-        }));
+        // trust_score in DB is 0-100, normalize to 0-1 first
+        const mapped = res.workers.map(w => {
+          const trustNorm = w.trust_score > 1 ? w.trust_score / 100 : w.trust_score;
+          return {
+            id: w.id,
+            name: w.name,
+            rating: (trustNorm * 5).toFixed(1),
+            jobs: Math.floor(Math.random() * 100) + 10,
+            distance: w.distance_km != null ? `${w.distance_km} km` : 'Nearby',
+            price: '₹500',
+            eta: w.distance_km != null ? `${Math.ceil(w.distance_km * 5 + 10)} min` : '~15 min',
+            verified: trustNorm > 0.5,
+            badge: w.match_score > 0.7 ? 'Best Match' : null,
+          };
+        });
         setWorkers(mapped);
       }
     } catch (err) {
@@ -49,10 +56,12 @@ export default function BookServiceScreen({ route, navigation }) {
     }
   }
 
-  // Fetch workers when screen loads or service changes
+  // Fetch workers when screen loads, service changes, or pincode changes
   useEffect(() => {
-    fetchMatchedWorkers(service.name);
-  }, [service.name]);
+    if (!isEditingLocation) {
+      fetchMatchedWorkers(service.name);
+    }
+  }, [service.name, customerPincode, isEditingLocation]);
 
   useEffect(() => {
     if (description.length < 10) {
@@ -128,12 +137,23 @@ export default function BookServiceScreen({ route, navigation }) {
         )}
 
         {/* Location */}
-        <Text style={styles.label}>Your location</Text>
+        <Text style={styles.label}>Your location (Pincode)</Text>
         <View style={styles.locationBox}>
           <Text style={styles.locationIcon}>📍</Text>
-          <Text style={styles.locationText}>14B, 3rd Cross, Koramangala, Bengaluru</Text>
-          <TouchableOpacity>
-            <Text style={styles.changeText}>Change</Text>
+          {isEditingLocation ? (
+            <TextInput 
+              style={[styles.locationText, { borderBottomWidth: 1, borderBottomColor: '#ccc', padding: 0 }]}
+              value={customerPincode}
+              onChangeText={setCustomerPincode}
+              keyboardType="numeric"
+              maxLength={6}
+              autoFocus
+            />
+          ) : (
+            <Text style={styles.locationText}>Pincode: {customerPincode}</Text>
+          )}
+          <TouchableOpacity onPress={() => setIsEditingLocation(!isEditingLocation)}>
+            <Text style={styles.changeText}>{isEditingLocation ? 'Save' : 'Change'}</Text>
           </TouchableOpacity>
         </View>
 

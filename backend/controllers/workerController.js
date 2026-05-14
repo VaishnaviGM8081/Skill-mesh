@@ -1,26 +1,46 @@
-const { supabase } = require('../config/supabase');
+const { getSupabaseAdmin } = require('../config/supabase');
+const supabase = getSupabaseAdmin();
 
 const workerController = {
   createOrUpdateProfile: async (req, res) => {
     try {
-      const { name, phone, trade_category, years_experience, pincode, payment_preference, availability_status } = req.body;
+      const { name, phone, trade_category, years_experience, pincode, availability_status } = req.body;
       const supabase_uid = req.user.id;
 
-      const { data, error } = await supabase
+      let { data: existing } = await supabase
         .from('workers')
-        .upsert({
-          supabase_uid,
-          name,
-          phone,
-          trade_category,
-          years_experience,
-          pincode,
-          payment_preference,
-          availability_status,
-          // Note: verification_level, trust_score, etc. have defaults in DB
-        }, { onConflict: 'supabase_uid' })
-        .select()
-        .single();
+        .select('id')
+        .eq('supabase_uid', supabase_uid)
+        .maybeSingle();
+
+      let query;
+      if (existing) {
+        query = supabase
+          .from('workers')
+          .update({
+            name,
+            phone,
+            trade_category,
+            years_experience,
+            pincode,
+            availability_status
+          })
+          .eq('supabase_uid', supabase_uid);
+      } else {
+        query = supabase
+          .from('workers')
+          .insert({
+            supabase_uid,
+            name,
+            phone,
+            trade_category,
+            years_experience,
+            pincode,
+            availability_status
+          });
+      }
+
+      const { data, error } = await query.select().single();
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
@@ -47,8 +67,7 @@ const workerController = {
         .from('worker_skills')
         .insert({
           worker_id: worker.id,
-          skill_name,
-          photo_url
+          skill_name
         })
         .select()
         .single();

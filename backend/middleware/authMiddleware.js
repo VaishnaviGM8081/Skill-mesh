@@ -3,8 +3,8 @@ const { supabase } = require('../config/supabase');
 const authMiddleware = async (req, res, next) => {
   // TEMP DEV AUTH BYPASS
   const DEV_MODE = true;
-  const TEST_WORKER_UID = "11111111-1111-1111-1111-111111111111";
-  const TEST_CUSTOMER_UID = "22222222-2222-2222-2222-222222222222";
+  const TEST_WORKER_UID = "e6d6bd85-afc2-4874-bca7-2c32d98086eb";
+  const TEST_CUSTOMER_UID = "0ba38fa3-1ab4-405e-884d-1c43d3721680";
 
   if (DEV_MODE) {
     // Identify user based on route or token if present

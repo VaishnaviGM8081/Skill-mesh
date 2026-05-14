@@ -12,7 +12,7 @@ const steps = [
   { id: 4, label: 'Job In Progress', icon: '🔧', done: false },
   { id: 5, label: 'Completed & Paid', icon: '💰', done: false },
 ];
-
+export default function JobTrackingScreen({ route, navigation }) {
   const jobId = route.params?.jobId;
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -105,15 +105,16 @@ const steps = [
 
         {/* Worker Contact Card */}
         <Text style={styles.sectionTitle}>Your Worker</Text>
+        {job?.workers && (
         <View style={styles.workerCard}>
           <View style={styles.workerAvatar}>
             <Text style={styles.workerAvatarText}>
-              {worker.name.split(' ').map(n => n[0]).join('')}
+              {job.workers.name.split(' ').map(n => n[0]).join('')}
             </Text>
           </View>
           <View style={styles.workerInfo}>
-            <Text style={styles.workerName}>{worker.name}</Text>
-            <Text style={styles.workerMeta}>⭐ {worker.rating || '4.8'} · Verified ✓</Text>
+            <Text style={styles.workerName}>{job.workers.name}</Text>
+            <Text style={styles.workerMeta}>⭐ {job.workers.rating || '4.8'} · Verified ✓</Text>
           </View>
           <View style={styles.contactButtons}>
             <TouchableOpacity style={styles.callBtn}>
@@ -124,13 +125,14 @@ const steps = [
             </TouchableOpacity>
           </View>
         </View>
+        )}
 
         {/* Escrow Notice */}
         <View style={styles.escrowBanner}>
           <Text style={styles.escrowIcon}>🔒</Text>
           <View>
             <Text style={styles.escrowTitle}>Payment Protected</Text>
-            <Text style={styles.escrowSub}>{worker.price} held in escrow · Released after job completion</Text>
+            <Text style={styles.escrowSub}>{job?.price || '₹450'} held in escrow · Released after job completion</Text>
           </View>
         </View>
 

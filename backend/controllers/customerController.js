@@ -1,23 +1,42 @@
-const { supabase } = require('../config/supabase');
+const { getSupabaseAdmin } = require('../config/supabase');
+const supabase = getSupabaseAdmin();
 
 const customerController = {
   createOrUpdateProfile: async (req, res) => {
     try {
-      const { name, phone, address, pincode } = req.body;
+      const { name, phone, pincode } = req.body;
       const supabase_uid = req.user.id;
 
-      const { data, error } = await supabase
+      let { data: existing } = await supabase
         .from('customers')
-        .upsert({
-          supabase_uid,
-          name,
-          phone,
-          address,
-          pincode,
-          updated_at: new Date()
-        }, { onConflict: 'supabase_uid' })
-        .select()
-        .single();
+        .select('id')
+        .eq('supabase_uid', supabase_uid)
+        .maybeSingle();
+
+      let query;
+      if (existing) {
+        query = supabase
+          .from('customers')
+          .update({
+            name,
+            phone,
+            pincode,
+            updated_at: new Date()
+          })
+          .eq('supabase_uid', supabase_uid);
+      } else {
+        query = supabase
+          .from('customers')
+          .insert({
+            supabase_uid,
+            name,
+            phone,
+            pincode,
+            updated_at: new Date()
+          });
+      }
+
+      const { data, error } = await query.select().single();
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
