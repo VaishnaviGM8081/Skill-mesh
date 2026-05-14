@@ -59,59 +59,107 @@ export default function CustomerPhoneAuthScreen({ navigation }) {
   const otpRef = useRef(null);
 
   async function handleSendOTP() {
+
     if (phone.replace(/\D/g, '').length !== 10) {
       setError('Enter a valid 10-digit mobile number');
       return;
     }
+
     setError('');
     setLoading(true);
+
     try {
-      const e164 = toE164India(phone);
-      const res = await fetch(`${API_URL}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164 }),
+
+      const formattedPhone = `+91${phone}`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone,
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Failed to send OTP');
+
+      if (error) {
+        throw error;
       }
+
+      Alert.alert('OTP Sent', 'Check your SMS messages');
+
       setStep('otp');
-      setTimeout(() => otpRef.current?.focus(), 200);
-    } catch (e) {
-      Alert.alert('OTP', e.message || 'Request failed');
+
+    } catch (err) {
+
+      console.log(err);
+
+      setError(err.message || 'Failed to send OTP');
+
     } finally {
+
       setLoading(false);
+
     }
   }
-
   async function handleVerifyOTP() {
-    const token = otp.replace(/\D/g, '');
-    if (token.length !== 6) {
+
+    if (otp.length !== 6) {
       setError('Enter the 6-digit OTP');
       return;
     }
+
     setError('');
     setLoading(true);
+
     try {
-      const e164 = toE164India(phone);
-      const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164, token }),
+
+      const formattedPhone = `+91${phone}`;
+
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: formattedPhone,
+        token: otp,
+        type: 'sms',
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Invalid OTP');
+
+      console.log('OTP DATA:', data);
+      console.log('OTP ERROR:', error);
+
+      if (error) {
+        throw error;
       }
-      const { access_token, refresh_token } = json.data;
-      await saveSessionFromBackend({ access_token, refresh_token });
-      await ensureCustomerRegistered(access_token);
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-    } catch (e) {
-      Alert.alert('Verify', e.message || 'Verification failed');
+
+      if (data?.session || data?.user) {
+
+        const { data: userData } = await supabase.auth.getUser();
+
+        const user = userData.user;
+
+        console.log('USER:', user);
+
+        const { data: insertData, error: insertError } = await supabase
+          .from('customers')
+          .insert([
+            {
+              supabase_uid: user.id,
+              phone: user.phone,
+              name: 'Customer User',
+            },
+          ]);
+
+        console.log('INSERT DATA:', insertData);
+        console.log('INSERT ERROR:', insertError);
+
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Main' }],
+        });
+      }
+
+    } catch (err) {
+
+      console.log(err);
+
+      setError(err.message || 'Invalid OTP');
+
     } finally {
+
       setLoading(false);
+
     }
   }
 

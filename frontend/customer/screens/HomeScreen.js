@@ -1,23 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, TextInput
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../lib/supabase';
 
 const services = [
   { id: 1, name: 'Plumber', icon: '🔧', workers: 24, avgPrice: '₹400–600' },
   { id: 2, name: 'Electrician', icon: '⚡', workers: 18, avgPrice: '₹350–550' },
   { id: 3, name: 'Carpenter', icon: '🪚', workers: 12, avgPrice: '₹500–800' },
   { id: 4, name: 'Painter', icon: '🖌️', workers: 9, avgPrice: '₹600–1200' },
-  { id: 5, name: 'Driver', icon: '🚗', workers: 31, avgPrice: '₹300–500' },
-  { id: 6, name: 'Cleaner', icon: '🧹', workers: 20, avgPrice: '₹250–400' },
-  { id: 7, name: 'Mechanic', icon: '🔩', workers: 15, avgPrice: '₹400–700' },
-  { id: 8, name: 'Delivery', icon: '📦', workers: 28, avgPrice: '₹200–350' },
+  { id: 5, name: 'Cleaner', icon: '🧹', workers: 20, avgPrice: '₹250–400' },
+  { id: 6, name: 'Mechanic', icon: '🔩', workers: 15, avgPrice: '₹400–700' },
+
 ];
 
 export default function HomeScreen({ navigation, apiState }) {
   const [search, setSearch] = useState('');
+  const [profileVisible, setProfileVisible] = useState(false);
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    loadUser();
+  }, []);
+  const loadUser = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.user) {
+      setUser(session.user);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+
+      await supabase.auth.signOut();
+
+      setProfileVisible(false);
+      setUser(null);
+
+      Alert.alert('Signed out successfully');
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PhoneAuth' }],
+      });
+
+    } catch (err) {
+
+      console.log(err);
+
+      Alert.alert('Logout failed');
+    }
+  };
 
   const filtered = services.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
@@ -33,9 +76,16 @@ export default function HomeScreen({ navigation, apiState }) {
             <Text style={styles.location}>📍 Pattanagere, Bengaluru</Text>
             <Text style={styles.title}>What do you need?</Text>
           </View>
-          <View style={styles.avatarBox}>
-            <Text style={styles.avatarText}>PS</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatarBox}
+            onPress={() => setProfileVisible(true)}
+          >
+            <Text style={styles.avatarText}>
+              {user?.email
+                ? user.email[0].toUpperCase()
+                : 'G'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Search */}
@@ -81,12 +131,78 @@ export default function HomeScreen({ navigation, apiState }) {
         </View>
         {/* Real backend match button */}
         {apiState?.requestLiveMatch && (
-          <TouchableOpacity
-            style={styles.liveMatchBtn}
-            onPress={apiState.requestLiveMatch}
-          >
-            <Text style={styles.liveMatchText}>🤖 Find Live Match (AI)</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.liveMatchBtn}
+              onPress={apiState.requestLiveMatch}
+            >
+              <Text style={styles.liveMatchText}>
+                🤖 Find Live Match (AI)
+              </Text>
+            </TouchableOpacity>
+
+            {/* Matched Worker Card */}
+            {apiState?.matchedWorker && (
+              <View
+                style={{
+                  backgroundColor: '#fff',
+                  borderRadius: 16,
+                  padding: 18,
+                  marginBottom: 24,
+                  elevation: 3,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: '700',
+                    marginBottom: 14,
+                    color: '#1A1A2E',
+                  }}
+                >
+                  🎯 Worker Matched
+                </Text>
+
+                <Text style={{ fontSize: 15, marginBottom: 8 }}>
+                  👤 {apiState.matchedWorker.name}
+                </Text>
+
+                <Text style={{ fontSize: 15, marginBottom: 8 }}>
+                  🛠 {apiState.matchedWorker.trade}
+                </Text>
+
+                <Text style={{ fontSize: 15, marginBottom: 8 }}>
+                  ⭐ {apiState.matchedWorker.rating}
+                </Text>
+
+                <Text style={{ fontSize: 15, marginBottom: 14 }}>
+                  📍 {apiState.matchedWorker.eta}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate('BookService')
+                  }
+                  style={{
+                    backgroundColor: '#6A1B9A',
+                    padding: 14,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: '#fff',
+                      fontWeight: '700',
+                      fontSize: 15,
+                    }}
+                  >
+                    Continue Booking →
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
         )}
 
 
@@ -107,6 +223,116 @@ export default function HomeScreen({ navigation, apiState }) {
         </View>
 
         <View style={{ height: 40 }} />
+        <Modal
+          visible={profileVisible}
+          transparent
+          animationType="slide"
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.4)',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: '#fff',
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+                padding: 24,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 22,
+                  fontWeight: '700',
+                  marginBottom: 20,
+                }}
+              >
+                My Account
+              </Text>
+
+              <Text
+                style={{
+                  fontSize: 15,
+                  marginBottom: 8,
+                }}
+              >
+                Logged in as:
+              </Text>
+
+              <Text
+                style={{
+                  fontSize: 16,
+                  color: '#555',
+                  marginBottom: 24,
+                }}
+              >
+                {user?.email || 'Guest User'}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setProfileVisible(false);
+                  navigation.navigate('PhoneAuth');
+                }}
+                style={{
+                  backgroundColor: '#1565C0',
+                  padding: 16,
+                  borderRadius: 14,
+                  marginBottom: 14,
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontWeight: '700',
+                    fontSize: 15,
+                  }}
+                >
+                  Sign In
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleSignOut}
+                style={{
+                  backgroundColor: '#D32F2F',
+                  padding: 16,
+                  borderRadius: 14,
+                  marginBottom: 14,
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: '#fff',
+                    fontWeight: '700',
+                    fontSize: 15,
+                  }}
+                >
+                  Sign Out
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setProfileVisible(false)}
+              >
+                <Text
+                  style={{
+                    textAlign: 'center',
+                    color: '#666',
+                    marginTop: 8,
+                  }}
+                >
+                  Close
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );

@@ -14,38 +14,81 @@ import JobTrackingScreen from './screens/JobTrackingScreen';
 import RoleSelectionScreen from './screens/RoleSelectionScreen';
 import CustomerOnboardingScreen from './screens/CustomerOnboardingScreen';
 
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 export const apiRequestLiveMatch = async (search, setMatchedWorker) => {
   try {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/api/jobs/request`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        trade_category: search.toLowerCase(),
-        latitude: 12.9352,
-        longitude: 77.6245,
-      }),
-    });
-    const json = await res.json();
-    if (json.success && json.data.worker) {
+
+    // Default fallback
+    const skill = search?.trim()
+      ? search.toLowerCase()
+      : 'plumber';
+
+    // Direct correct backend route
+    const res = await fetch(
+      `${API_URL}/api/jobs/match-workers?skill=${skill}&pincode=560001`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    // IMPORTANT: prevent HTML parse crash
+    const text = await res.text();
+
+    let json;
+
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      console.error('Backend returned non-JSON:', text);
+      Alert.alert(
+        'Backend Error',
+        'API route not found or backend crashed.'
+      );
+      return;
+    }
+
+    if (json.success && json.workers?.length > 0) {
+
+      const worker = json.workers[0];
+
       setMatchedWorker({
-        name: json.data.worker.name,
-        trade: json.data.worker.trade_category,
-        badge: json.data.worker.verification_level,
-        eta: `${json.data.worker.dist_meters} meters away`,
+        name: worker.name || 'Nearby Worker',
+        trade: skill,
+        badge:
+          worker.match_score > 0.7
+            ? 'Top Match'
+            : 'Verified',
+        eta:
+          worker.distance_km != null
+            ? `${worker.distance_km} km away`
+            : 'Nearby',
         price: '₹350 - ₹500',
         rating: 4.8,
-        id: json.data.worker.id,
+        id: worker.id,
       });
+
     } else {
-      Alert.alert('No workers found nearby!', json.error || 'Try a different service or area.');
+
+      Alert.alert(
+        'No workers found nearby!',
+        'Try another service.'
+      );
     }
+
   } catch (e) {
+
     console.error('Match API Error', e);
-    Alert.alert('Backend offline', 'Could not reach SkillMesh API.');
+
+    Alert.alert(
+      'Backend offline',
+      'Could not reach SkillMesh API.'
+    );
   }
 };
 

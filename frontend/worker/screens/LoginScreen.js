@@ -188,7 +188,7 @@ export default function LoginScreen({ navigation }) {
 
         {/* Worker types */}
         <View style={styles.workerTypes}>
-          {['🔧 Plumber', '⚡ Electrician', '🪚 Carpenter', '🚗 Driver'].map((w, i) => (
+          {['🔧 Plumber', '⚡ Electrician', '🪚 Carpenter',].map((w, i) => (
             <View key={i} style={styles.workerChip}>
               <Text style={styles.workerChipText}>{w}</Text>
             </View>
