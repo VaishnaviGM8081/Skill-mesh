@@ -11,6 +11,8 @@ import CustomerPhoneAuthScreen from './screens/CustomerPhoneAuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import BookServiceScreen from './screens/BookServiceScreen';
 import JobTrackingScreen from './screens/JobTrackingScreen';
+import RoleSelectionScreen from './screens/RoleSelectionScreen';
+import CustomerOnboardingScreen from './screens/CustomerOnboardingScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -132,37 +134,37 @@ export default function App() {
   const [initialRoute, setInitialRoute] = useState('PhoneAuth');
 
   const refreshRouteFromStorage = useCallback(async () => {
+    // TEMP DEV AUTH MODE
+    const DEV_MODE = true;
+    const TEST_CUSTOMER_UID = "22222222-2222-2222-2222-222222222222";
+
     const token = await SecureStore.getItemAsync('accessToken');
-    if (!token) {
-      setInitialRoute('PhoneAuth');
-      return;
+
+    if (DEV_MODE) {
+      if (!token || token !== TEST_CUSTOMER_UID) {
+        setInitialRoute('RoleSelection');
+        return;
+      }
+    } else {
+      if (!token) {
+        setInitialRoute('PhoneAuth');
+        return;
+      }
     }
+
     try {
       const headers = await getAuthHeaders();
-      let me = await fetch(`${API_URL}/api/customers/me`, { headers });
-      if (me.status === 404) {
-        const reg = await fetch(`${API_URL}/api/customers/register`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ name: 'SkillMesh Customer' }),
-        });
-        const regJson = await reg.json().catch(() => ({}));
-        if (!reg.ok || !regJson.success) {
-          setInitialRoute('PhoneAuth');
-          return;
-        }
-        await SecureStore.setItemAsync('customerId', String(regJson.data.id));
+      const me = await fetch(`${API_URL}/api/customers/me`, { headers });
+      const meJson = await me.json().catch(() => ({}));
+      if (me.status === 404 || !meJson.data) {
+        setInitialRoute('Onboarding');
       } else {
-        const meJson = await me.json().catch(() => ({}));
-        if (!me.ok || !meJson.success) {
-          setInitialRoute('PhoneAuth');
-          return;
-        }
         await SecureStore.setItemAsync('customerId', String(meJson.data.id));
+        setInitialRoute('Main');
       }
-      setInitialRoute('Main');
-    } catch {
-      setInitialRoute('PhoneAuth');
+    } catch (e) {
+      console.error('Customer profile check error:', e);
+      setInitialRoute('RoleSelection');
     }
   }, []);
 
@@ -185,7 +187,9 @@ export default function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator key={initialRoute} initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
         <Stack.Screen name="PhoneAuth" component={CustomerPhoneAuthScreen} />
+        <Stack.Screen name="Onboarding" component={CustomerOnboardingScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="BookService" component={BookServiceScreen} />
         <Stack.Screen name="JobTracking" component={JobTrackingScreen} />

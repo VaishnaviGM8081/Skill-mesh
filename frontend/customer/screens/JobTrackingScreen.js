@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, SafeAreaView
 } from 'react-native';
+import { API_BASE_URL } from '../apiConfig';
 
 const steps = [
   { id: 1, label: 'Job Confirmed', icon: '✅', done: true },
@@ -12,17 +13,40 @@ const steps = [
   { id: 5, label: 'Completed & Paid', icon: '💰', done: false },
 ];
 
-export default function JobTrackingScreen({ route, navigation }) {
-  const worker = route.params?.worker || { name: 'Raju Kumar', eta: '15 min', price: '₹500' };
-  const service = route.params?.service || { name: 'Plumber', icon: '🔧' };
-  const [eta, setEta] = useState(parseInt(worker.eta));
+  const jobId = route.params?.jobId;
+  const [job, setJob] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setEta(prev => prev > 1 ? prev - 1 : 1);
-    }, 60000);
+    async function fetchJobStatus() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`);
+        const data = await res.json();
+        if (data.success) {
+          setJob(data.data);
+          if (data.data.status === 'completed' || data.data.status === 'cancelled') {
+            clearInterval(timer);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchJobStatus();
+    const timer = setInterval(fetchJobStatus, 5000);
     return () => clearInterval(timer);
-  }, []);
+  }, [jobId]);
+
+  const currentStatus = job?.status || 'pending';
+  const displaySteps = steps.map(step => {
+    if (currentStatus === 'pending') return { ...step, done: step.id <= 1, active: step.id === 2 };
+    if (currentStatus === 'in_progress') return { ...step, done: step.id <= 3, active: step.id === 4 };
+    if (currentStatus === 'completed') return { ...step, done: true, active: false };
+    return step;
+  });
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -39,9 +63,9 @@ export default function JobTrackingScreen({ route, navigation }) {
 
         {/* ETA Card */}
         <View style={styles.etaCard}>
-          <Text style={styles.etaLabel}>Worker arriving in</Text>
-          <Text style={styles.etaTime}>{eta} min</Text>
-          <Text style={styles.etaWorker}>{worker.name} · {service.icon} {service.name}</Text>
+          <Text style={styles.etaLabel}>Status</Text>
+          <Text style={styles.etaTime}>{currentStatus.toUpperCase()}</Text>
+          <Text style={styles.etaWorker}>{job?.workers?.name || 'Worker'} · {job?.workers?.trade_category || 'Service'}</Text>
         </View>
 
         {/* Map Placeholder */}
@@ -54,7 +78,7 @@ export default function JobTrackingScreen({ route, navigation }) {
         {/* Progress Steps */}
         <Text style={styles.sectionTitle}>Job Status</Text>
         <View style={styles.stepsCard}>
-          {steps.map((step, index) => (
+          {displaySteps.map((step, index) => (
             <View key={step.id} style={styles.stepRow}>
               <View style={styles.stepLeft}>
                 <View style={[
@@ -64,7 +88,7 @@ export default function JobTrackingScreen({ route, navigation }) {
                 ]}>
                   <Text style={styles.stepIcon}>{step.icon}</Text>
                 </View>
-                {index < steps.length - 1 && (
+                {index < displaySteps.length - 1 && (
                   <View style={[styles.stepLine, step.done && styles.stepLineDone]} />
                 )}
               </View>

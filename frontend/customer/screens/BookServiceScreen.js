@@ -5,33 +5,26 @@ import {
 } from 'react-native';
 import { API_BASE_URL } from '../apiConfig';
 
-const workers = [
-  {
-    id: 1, name: 'Raju Kumar', rating: 4.8,
-    jobs: 127, distance: '1.2 km',
-    price: '₹500', eta: '15 min',
-    verified: true, badge: 'Top Rated',
-  },
-  {
-    id: 2, name: 'Suresh Babu', rating: 4.6,
-    jobs: 89, distance: '2.1 km',
-    price: '₹450', eta: '22 min',
-    verified: true, badge: null,
-  },
-  {
-    id: 3, name: 'Mohan Das', rating: 4.5,
-    jobs: 64, distance: '3.4 km',
-    price: '₹400', eta: '30 min',
-    verified: false, badge: null,
-  },
-];
+  const [workers, setWorkers] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-export default function BookServiceScreen({ route, navigation }) {
-  const service = route.params?.service || { name: 'Plumber', icon: '🔧' };
-  const [description, setDescription] = useState('');
-  const [selected, setSelected] = useState(null);
-  const [analysis, setAnalysis] = useState(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  useEffect(() => {
+    async function fetchWorkers() {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/workers/search?query=${service.name}`);
+        const data = await res.json();
+        if (data.success) {
+          setWorkers(data.data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchWorkers();
+  }, [service.name]);
 
   useEffect(() => {
     if (description.length < 10) {
@@ -60,9 +53,26 @@ export default function BookServiceScreen({ route, navigation }) {
     return () => clearTimeout(timer);
   }, [description]);
 
-  function handleBook() {
+  async function handleBook() {
     if (!selected) return;
-    navigation.navigate('JobTracking', { worker: selected, service });
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_id: selected.id,
+          pincode: '560034', // Demo pincode
+          notes: description
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        navigation.navigate('JobTracking', { worker: selected, service, jobId: data.data.id });
+      }
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Booking Failed', 'Unable to send service request.');
+    }
   }
 
   return (
