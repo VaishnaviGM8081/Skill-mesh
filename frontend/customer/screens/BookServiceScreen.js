@@ -1,209 +1,297 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, SafeAreaView, TextInput
+  TouchableOpacity, SafeAreaView, TextInput,
+  Alert
 } from 'react-native';
 
-const workers = [
-  {
-    id: 1, name: 'Raju Kumar', rating: 4.8,
-    jobs: 127, distance: '1.2 km',
-    price: '₹500', eta: '15 min',
-    verified: true, badge: 'Top Rated',
-  },
-  {
-    id: 2, name: 'Suresh Babu', rating: 4.6,
-    jobs: 89, distance: '2.1 km',
-    price: '₹450', eta: '22 min',
-    verified: true, badge: null,
-  },
-  {
-    id: 3, name: 'Mohan Das', rating: 4.5,
-    jobs: 64, distance: '3.4 km',
-    price: '₹400', eta: '30 min',
-    verified: false, badge: null,
-  },
+const CATEGORIES = [
+  { id: '1', name: 'Plumber', icon: '🔧' },
+  { id: '2', name: 'Electrician', icon: '⚡' },
+  { id: '3', name: 'Carpenter', icon: '🪚' },
+  { id: '4', name: 'Cleaning', icon: '🧹' },
+  { id: '5', name: 'Painter', icon: '🎨' },
 ];
 
-export default function BookServiceScreen({ route, navigation }) {
-  const service = route.params?.service || { name: 'Plumber', icon: '🔧' };
-  const [description, setDescription] = useState('');
-  const [selected, setSelected] = useState(null);
+const URGENCY_LEVELS = ['Normal', 'Urgent', 'Emergency'];
 
-  function handleBook() {
-    if (!selected) return;
-    navigation.navigate('JobTracking', { worker: selected, service });
-  }
+export default function BookServiceScreen({ navigation }) {
+  const [serviceCategory, setServiceCategory] = useState(CATEGORIES[0].name);
+  const [jobDescription, setJobDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [budget, setBudget] = useState('');
+  const [urgency, setUrgency] = useState('Normal');
+  const [additionalRequirements, setAdditionalRequirements] = useState('');
+
+  const handleSubmit = () => {
+    Alert.alert(
+      "Form State",
+      JSON.stringify({
+        serviceCategory,
+        jobDescription,
+        location,
+        budget,
+        urgency,
+        additionalRequirements
+      }, null, 2)
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.container}>
-
-        {/* Back + Title */}
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>{service.icon} {service.name}</Text>
+          <Text style={styles.title}>Post a Job</Text>
+          <Text style={styles.subtitle}>Find the right worker for your needs</Text>
         </View>
 
-        {/* Description */}
-        <Text style={styles.label}>Describe your problem</Text>
+        {/* 1. Service Category */}
+        <Text style={styles.sectionLabel}>Service Category</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat.id}
+              style={[
+                styles.categoryCard,
+                serviceCategory === cat.name && styles.categoryCardSelected
+              ]}
+              onPress={() => setServiceCategory(cat.name)}
+            >
+              <Text style={styles.categoryIcon}>{cat.icon}</Text>
+              <Text style={[
+                styles.categoryText,
+                serviceCategory === cat.name && styles.categoryTextSelected
+              ]}>
+                {cat.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* 2. Job Description */}
+        <Text style={styles.sectionLabel}>Job Description</Text>
         <TextInput
           style={styles.textArea}
-          placeholder="e.g. Pipe leaking under kitchen sink since morning..."
-          placeholderTextColor="#aaa"
+          placeholder="Describe the issue or task in detail..."
+          placeholderTextColor="#999"
           multiline
-          numberOfLines={3}
-          value={description}
-          onChangeText={setDescription}
+          numberOfLines={4}
+          value={jobDescription}
+          onChangeText={setJobDescription}
         />
 
-        {/* Location */}
-        <Text style={styles.label}>Your location</Text>
-        <View style={styles.locationBox}>
-          <Text style={styles.locationIcon}>📍</Text>
-          <Text style={styles.locationText}>14B, 3rd Cross, Koramangala, Bengaluru</Text>
-          <TouchableOpacity>
-            <Text style={styles.changeText}>Change</Text>
-          </TouchableOpacity>
+        {/* 3. Location / Pincode */}
+        <Text style={styles.sectionLabel}>Location / Pincode</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Koramangala, 560034"
+          placeholderTextColor="#999"
+          value={location}
+          onChangeText={setLocation}
+        />
+
+        {/* 4. Budget */}
+        <Text style={styles.sectionLabel}>Estimated Budget (₹)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. 500"
+          placeholderTextColor="#999"
+          keyboardType="numeric"
+          value={budget}
+          onChangeText={setBudget}
+        />
+
+        {/* 5. Urgency Level */}
+        <Text style={styles.sectionLabel}>Urgency Level</Text>
+        <View style={styles.urgencyContainer}>
+          {URGENCY_LEVELS.map((level) => (
+            <TouchableOpacity
+              key={level}
+              style={[
+                styles.urgencyButton,
+                urgency === level && styles.urgencyButtonSelected
+              ]}
+              onPress={() => setUrgency(level)}
+            >
+              <Text style={[
+                styles.urgencyText,
+                urgency === level && styles.urgencyTextSelected
+              ]}>
+                {level}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* AI Match Banner */}
-        <View style={styles.aiBanner}>
-          <Text style={styles.aiIcon}>🤖</Text>
-          <Text style={styles.aiText}>AI matched 3 workers near you based on rating, distance and availability</Text>
-        </View>
+        {/* Additional Requirements */}
+        <Text style={styles.sectionLabel}>Additional Requirements</Text>
+        <Text style={styles.helperText}>Any specific tools, materials, or conditions required?</Text>
+        <TextInput
+          style={styles.textArea}
+          placeholder="e.g. need transport support, generator required..."
+          placeholderTextColor="#999"
+          multiline
+          numberOfLines={4}
+          value={additionalRequirements}
+          onChangeText={setAdditionalRequirements}
+        />
 
-        {/* Worker List */}
-        <Text style={styles.label}>Available Workers</Text>
-        {workers.map((worker) => (
-          <TouchableOpacity
-            key={worker.id}
-            style={[styles.workerCard, selected?.id === worker.id && styles.workerSelected]}
-            onPress={() => setSelected(worker)}
-          >
-            {worker.badge && (
-              <View style={styles.topBadge}>
-                <Text style={styles.topBadgeText}>🏆 {worker.badge}</Text>
-              </View>
-            )}
-            <View style={styles.workerRow}>
-              <View style={styles.workerAvatar}>
-                <Text style={styles.workerAvatarText}>
-                  {worker.name.split(' ').map(n => n[0]).join('')}
-                </Text>
-              </View>
-              <View style={styles.workerInfo}>
-                <View style={styles.workerNameRow}>
-                  <Text style={styles.workerName}>{worker.name}</Text>
-                  {worker.verified && <Text style={styles.verifiedBadge}>✓ Verified</Text>}
-                </View>
-                <Text style={styles.workerStats}>
-                  ⭐ {worker.rating} · {worker.jobs} jobs · {worker.distance}
-                </Text>
-                <Text style={styles.workerEta}>🕐 Arrives in {worker.eta}</Text>
-              </View>
-              <View style={styles.workerPrice}>
-                <Text style={styles.priceText}>{worker.price}</Text>
-                <Text style={styles.priceLabel}>est.</Text>
-              </View>
-            </View>
-            {selected?.id === worker.id && (
-              <View style={styles.selectedTick}>
-                <Text style={styles.selectedTickText}>✓ Selected</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-
-        {/* Book Button */}
-        <TouchableOpacity
-          style={[styles.bookButton, !selected && styles.bookButtonDisabled]}
-          onPress={handleBook}
-          disabled={!selected}
-        >
-          <Text style={styles.bookButtonText}>
-            {selected ? `Book ${selected.name} →` : 'Select a worker to book'}
-          </Text>
+        {/* Submit Button */}
+        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+          <Text style={styles.submitButtonText}>Review & Post Job</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F5F7FA' },
-  container: { flex: 1, padding: 20 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 24, marginTop: 10 },
-  backBtn: { padding: 4 },
-  backText: { fontSize: 15, color: '#1565C0', fontWeight: '500' },
-  title: { fontSize: 20, fontWeight: '700', color: '#1A1A2E' },
-  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
+  safe: {
+    flex: 1,
+    backgroundColor: '#F7F9FC',
+  },
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 24,
+    marginTop: 10,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1A202C',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#718096',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2D3748',
+    marginBottom: 10,
+    marginTop: 16,
+  },
+  helperText: {
+    fontSize: 13,
+    color: '#718096',
+    marginBottom: 8,
+    marginTop: -6,
+  },
+  categoryScroll: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  categoryCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginRight: 12,
+    alignItems: 'center',
+    width: 100,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  categoryCardSelected: {
+    borderColor: '#4299E1',
+    backgroundColor: '#EBF8FF',
+  },
+  categoryIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  categoryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4A5568',
+  },
+  categoryTextSelected: {
+    color: '#2B6CB0',
+  },
   textArea: {
-    backgroundColor: '#fff', borderRadius: 12,
-    padding: 14, fontSize: 14, color: '#333',
-    marginBottom: 20, elevation: 1,
-    textAlignVertical: 'top', minHeight: 80,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    color: '#1A202C',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    textAlignVertical: 'top',
+    minHeight: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  locationBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 12,
-    padding: 14, marginBottom: 20, elevation: 1, gap: 10,
+  input: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    color: '#1A202C',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  locationIcon: { fontSize: 16 },
-  locationText: { flex: 1, fontSize: 13, color: '#333' },
-  changeText: { fontSize: 13, color: '#1565C0', fontWeight: '600' },
-  aiBanner: {
-    backgroundColor: '#EDE7F6', borderRadius: 12,
-    padding: 14, flexDirection: 'row',
-    alignItems: 'center', marginBottom: 20, gap: 10,
+  urgencyContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  aiIcon: { fontSize: 20 },
-  aiText: { flex: 1, fontSize: 13, color: '#4527A0', lineHeight: 18 },
-  workerCard: {
-    backgroundColor: '#fff', borderRadius: 14,
-    padding: 16, marginBottom: 12, elevation: 2,
-    borderWidth: 1.5, borderColor: 'transparent',
+  urgencyButton: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
   },
-  workerSelected: { borderColor: '#1565C0', backgroundColor: '#F0F4FF' },
-  topBadge: {
-    backgroundColor: '#FFF8E1', alignSelf: 'flex-start',
-    paddingHorizontal: 10, paddingVertical: 3,
-    borderRadius: 20, marginBottom: 10,
+  urgencyButtonSelected: {
+    backgroundColor: '#4299E1',
+    borderColor: '#4299E1',
   },
-  topBadgeText: { fontSize: 11, color: '#F57F17', fontWeight: '600' },
-  workerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  workerAvatar: {
-    width: 46, height: 46, borderRadius: 23,
-    backgroundColor: '#1565C0',
-    justifyContent: 'center', alignItems: 'center',
+  urgencyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4A5568',
   },
-  workerAvatarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  workerInfo: { flex: 1 },
-  workerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  workerName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  verifiedBadge: {
-    fontSize: 10, color: '#2E7D32',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
+  urgencyTextSelected: {
+    color: '#FFF',
   },
-  workerStats: { fontSize: 12, color: '#666', marginTop: 4 },
-  workerEta: { fontSize: 12, color: '#1565C0', marginTop: 3 },
-  workerPrice: { alignItems: 'flex-end' },
-  priceText: { fontSize: 18, fontWeight: '700', color: '#1A1A2E' },
-  priceLabel: { fontSize: 11, color: '#888' },
-  selectedTick: {
-    marginTop: 10, backgroundColor: '#E3F2FD',
-    borderRadius: 8, padding: 6, alignItems: 'center',
+  submitButton: {
+    backgroundColor: '#2B6CB0',
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+    marginTop: 30,
+    shadowColor: '#2B6CB0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  selectedTickText: { fontSize: 13, color: '#1565C0', fontWeight: '600' },
-  bookButton: {
-    backgroundColor: '#1565C0', borderRadius: 14,
-    padding: 18, alignItems: 'center', marginTop: 8,
+  submitButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
-  bookButtonDisabled: { backgroundColor: '#B0BEC5' },
-  bookButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
