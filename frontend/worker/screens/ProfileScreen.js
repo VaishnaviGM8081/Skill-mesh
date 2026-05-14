@@ -24,18 +24,37 @@ export default function ProfileScreen() {
     setLoading(true);
     setError('');
     try {
-      const workerId = await SecureStore.getItemAsync('workerId');
-      if (!workerId) {
-        setError('Missing worker id');
-        setProfile(null);
-        return;
-      }
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_URL}/api/workers/${workerId}/profile`, { headers });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Failed to load profile');
+      let json;
+
+      // Try by workerId first; fall back to /me if not stored yet
+      const workerId = await SecureStore.getItemAsync('workerId');
+      if (workerId) {
+        const res = await fetch(`${API_URL}/api/workers/${workerId}/profile`, { headers });
+        json = await res.json().catch(() => ({}));
       }
+
+      // Fallback to /me if workerId missing or request failed
+      if (!json?.success) {
+        const res2 = await fetch(`${API_URL}/api/workers/me`, { headers });
+        const json2 = await res2.json().catch(() => ({}));
+        if (json2.success && json2.data) {
+          // Store for future use
+          await SecureStore.setItemAsync('workerId', String(json2.data.id));
+          // Wrap into same shape as getProfile response
+          json = {
+            success: true,
+            data: {
+              ...json2.data,
+              stats: { total_jobs: 0, avg_rating: json2.data.average_rating || null },
+            }
+          };
+        } else {
+          throw new Error(json2.error || 'Failed to load profile');
+        }
+      }
+
+      if (!json.success) throw new Error(json.error || 'Failed to load profile');
       setProfile(json.data);
     } catch (e) {
       setError(e.message || 'Error');
@@ -54,7 +73,8 @@ export default function ProfileScreen() {
   async function handleSignOut() {
     await supabase.auth.signOut();
     await clearAuthStorage();
-    navigation.reset({ index: 0, routes: [{ name: 'PhoneAuth' }] });
+    // Route to RoleSelection (works in both DEV and production modes)
+    navigation.reset({ index: 0, routes: [{ name: 'RoleSelection' }] });
   }
 
   if (loading) {
@@ -77,9 +97,21 @@ export default function ProfileScreen() {
     );
   }
 
-  const avgRating = profile.stats?.avg_rating != null ? Number(profile.stats.avg_rating) : null;
-  const totalJobs = profile.stats?.total_jobs ?? 0;
-  const skills = Array.isArray(profile.skills) ? profile.skills : [];
+  // Use real DB columns first, fall back to stats sub-object
+  const avgRating = profile.average_rating != null
+    ? Number(profile.average_rating)
+    : (profile.stats?.avg_rating != null ? Number(profile.stats.avg_rating) : null);
+
+  const totalJobs = profile.completed_jobs ?? profile.stats?.total_jobs ?? 0;
+  const totalRatings = profile.total_ratings ?? 0;
+  const cancellations = profile.cancellations ?? 0;
+  const completionRate = totalJobs > 0
+    ? Math.round(((totalJobs - cancellations) / totalJobs) * 100)
+    : 100;
+
+  const skills = Array.isArray(profile.worker_skills)
+    ? profile.worker_skills
+    : Array.isArray(profile.skills) ? profile.skills : [];
   const created = profile.created_at ? new Date(profile.created_at) : null;
   const memberSince = created
     ? created.toLocaleString(undefined, { month: 'long', year: 'numeric' })
@@ -106,19 +138,34 @@ export default function ProfileScreen() {
           <View style={styles.ratingRow}>
             <Text style={styles.ratingText}>⭐ {avgRating != null ? avgRating.toFixed(1) : '—'}</Text>
             <Text style={styles.dot}>·</Text>
-            <Text style={styles.jobsText}>{totalJobs} jobs</Text>
+            <Text style={styles.jobsText}>{totalJobs} jobs done</Text>
             <Text style={styles.dot}>·</Text>
             <Text style={styles.memberText}>Since {memberSince}</Text>
+          </View>
+          <View style={styles.statsRow}>
+            <View style={styles.statPill}>
+              <Text style={styles.statPillValue}>{completionRate}%</Text>
+              <Text style={styles.statPillLabel}>Completion</Text>
+            </View>
+            <View style={styles.statPill}>
+              <Text style={styles.statPillValue}>{totalRatings}</Text>
+              <Text style={styles.statPillLabel}>Reviews</Text>
+            </View>
+            <View style={styles.statPill}>
+              <Text style={styles.statPillValue}>{profile.years_experience}y</Text>
+              <Text style={styles.statPillLabel}>Experience</Text>
+            </View>
           </View>
         </View>
 
         <View style={styles.trustCard}>
           <View style={styles.trustLeft}>
-            <Text style={styles.trustTitle}>Trust</Text>
-            <Text style={styles.trustSub}>Verification level and ratings from SkillMesh</Text>
+            <Text style={styles.trustTitle}>Trust Score</Text>
+            <Text style={styles.trustSub}>Based on ratings, job completion and platform behaviour</Text>
           </View>
           <View style={styles.trustBadge}>
-            <Text style={styles.trustScore}>{String(profile.verification_level || '—').slice(0, 2).toUpperCase()}</Text>
+            <Text style={styles.trustScore}>{profile.trust_score ?? '—'}</Text>
+            <Text style={styles.trustMax}>/100</Text>
           </View>
         </View>
 
@@ -151,10 +198,22 @@ export default function ProfileScreen() {
           </View>
           <View style={[styles.infoRow, styles.verifyBorder]}>
             <Text style={styles.infoIcon}>📍</Text>
-            <View>
-              <Text style={styles.infoLabel}>Location (GeoJSON)</Text>
-              <Text style={styles.infoValue} numberOfLines={2}>
-                {profile.location || '—'}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoLabel}>Location</Text>
+              <Text style={styles.infoValue}>
+                {(() => {
+                  const loc = profile.location;
+                  if (!loc) return '—';
+                  // Parse GeoJSON Point and show readable coordinates
+                  try {
+                    const parsed = typeof loc === 'string' ? JSON.parse(loc) : loc;
+                    if (parsed?.coordinates) {
+                      const [lng, lat] = parsed.coordinates;
+                      return `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+                    }
+                  } catch (_) {}
+                  return String(loc);
+                })()}
               </Text>
             </View>
           </View>
@@ -236,8 +295,24 @@ const styles = StyleSheet.create({
   trustBadge: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    gap: 2,
   },
-  trustScore: { fontSize: 28, fontWeight: '700', color: '#fff' },
+  trustScore: { fontSize: 32, fontWeight: '800', color: '#fff' },
+  trustMax: { fontSize: 14, color: '#90CAF9', marginBottom: 4, fontWeight: '500' },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  statPill: {
+    flex: 1,
+    backgroundColor: '#F0F4FF',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  statPillValue: { fontSize: 16, fontWeight: '700', color: '#1565C0' },
+  statPillLabel: { fontSize: 11, color: '#666', marginTop: 2 },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',

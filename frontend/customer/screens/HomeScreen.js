@@ -1,42 +1,49 @@
 import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, TextInput, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { API_BASE_URL } from '../apiConfig';
 
 const services = [
-  { id: 1, name: 'Plumber', icon: '🔧', workers: 24, avgPrice: '₹400–600' },
+  { id: 1, name: 'Plumber',     icon: '🔧', workers: 24, avgPrice: '₹400–600' },
   { id: 2, name: 'Electrician', icon: '⚡', workers: 18, avgPrice: '₹350–550' },
-  { id: 3, name: 'Carpenter', icon: '🪚', workers: 12, avgPrice: '₹500–800' },
-  { id: 4, name: 'Painter', icon: '🖌️', workers: 9, avgPrice: '₹600–1200' },
-  { id: 5, name: 'Cleaner', icon: '🧹', workers: 20, avgPrice: '₹250–400' },
-  { id: 6, name: 'Mechanic', icon: '🔩', workers: 15, avgPrice: '₹400–700' },
-
+  { id: 3, name: 'Carpenter',   icon: '🪚', workers: 12, avgPrice: '₹500–800' },
+  { id: 4, name: 'Painter',     icon: '🖌️', workers: 9,  avgPrice: '₹600–1200' },
+  { id: 5, name: 'Cleaner',     icon: '🧹', workers: 20, avgPrice: '₹250–400' },
+  { id: 6, name: 'Mechanic',    icon: '🔩', workers: 15, avgPrice: '₹400–700' },
 ];
 
+const TRADE_ICONS = { plumber: '🔧', electrician: '⚡', carpenter: '🪚', painter: '🖌️', cleaner: '🧹', cook: '🍳', gardener: '🌿', mechanic: '🔩' };
+
 export default function HomeScreen({ navigation, apiState }) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch]               = useState('');
   const [profileVisible, setProfileVisible] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser]                   = useState(null);
+  const [recentJobs, setRecentJobs]       = useState([]);
+
   useEffect(() => {
     loadUser();
   }, []);
-  const loadUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
 
+  const loadUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       setUser(session.user);
+      fetchRecentJobs(session.access_token);
     }
+  };
+
+  const fetchRecentJobs = async (token) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/jobs/customer/history`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) setRecentJobs(data.data || []);
+    } catch (e) { /* silently ignore if not logged in */ }
   };
 
   const handleSignOut = async () => {
@@ -207,20 +214,50 @@ export default function HomeScreen({ navigation, apiState }) {
 
 
 
-        {/* Recent Activity */}
+        {/* Recent Jobs — real data */}
         <Text style={styles.sectionTitle}>Your Recent Jobs</Text>
-        <View style={styles.recentCard}>
-          <View style={styles.recentRow}>
-            <Text style={styles.recentIcon}>🔧</Text>
-            <View style={styles.recentInfo}>
-              <Text style={styles.recentTitle}>Plumbing — Pipe leak fixed</Text>
-              <Text style={styles.recentSub}>Raju Kumar · 3 days ago</Text>
-            </View>
-            <View style={styles.recentRating}>
-              <Text style={styles.ratingText}>⭐ 5.0</Text>
-            </View>
+        {recentJobs.length === 0 ? (
+          <View style={styles.recentCard}>
+            <Text style={{ color: '#aaa', textAlign: 'center', paddingVertical: 12, fontSize: 14 }}>
+              No jobs yet. Book your first service above!
+            </Text>
           </View>
-        </View>
+        ) : (
+          recentJobs.slice(0, 3).map(j => {
+            const trade = j.trade_category || j.workers?.trade_category || 'service';
+            const icon = TRADE_ICONS[trade.toLowerCase()] || '🛠';
+            const workerName = j.workers?.name || 'Worker';
+            const daysAgo = Math.floor((Date.now() - new Date(j.created_at)) / 86400000);
+            const timeStr = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`;
+            const statusColors = { completed: '#2E7D32', pending: '#F57F17', in_progress: '#1565C0', cancelled: '#C62828' };
+            return (
+              <TouchableOpacity
+                key={j.id}
+                style={styles.recentCard}
+                onPress={() => navigation.navigate('JobTracking', { jobId: j.id })}
+              >
+                <View style={styles.recentRow}>
+                  <Text style={styles.recentIcon}>{icon}</Text>
+                  <View style={styles.recentInfo}>
+                    <Text style={styles.recentTitle}>{trade.charAt(0).toUpperCase() + trade.slice(1)} — {j.notes || 'Service request'}</Text>
+                    <Text style={styles.recentSub}>{workerName} · {timeStr}</Text>
+                  </View>
+                  {j.customer_rating ? (
+                    <View style={styles.recentRating}>
+                      <Text style={styles.ratingText}>⭐ {j.customer_rating}.0</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.recentRating, { backgroundColor: (statusColors[j.status] || '#888') + '20' }]}>
+                      <Text style={[styles.ratingText, { color: statusColors[j.status] || '#888' }]}>
+                        {j.status.replace('_', ' ')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
 
         <View style={{ height: 40 }} />
         <Modal

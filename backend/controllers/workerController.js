@@ -1,6 +1,36 @@
-const { supabase } = require('../config/supabase');
+const { supabase, getSupabaseAdmin } = require('../config/supabase');
 
 const workerController = {
+  toggleAvailability: async (req, res) => {
+    try {
+      const supabase_uid = req.user.id;
+      const { available } = req.body; // boolean
+
+      const { data: worker } = await supabase
+        .from('workers')
+        .select('id, availability_status')
+        .eq('supabase_uid', supabase_uid)
+        .limit(1)
+        .maybeSingle();
+
+      if (!worker) return res.status(404).json({ success: false, error: 'Worker not found' });
+
+      const newStatus = typeof available === 'boolean' ? available : !worker.availability_status;
+
+      const { data, error } = await supabase
+        .from('workers')
+        .update({ availability_status: newStatus })
+        .eq('id', worker.id)
+        .select('id, availability_status')
+        .maybeSingle();
+
+      if (error) throw error;
+      res.status(200).json({ success: true, data: { isOnline: data ? data.availability_status : newStatus } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   createOrUpdateProfile: async (req, res) => {
     try {
       const { name, phone, trade_category, years_experience, pincode, availability_status } = req.body;
@@ -47,23 +77,138 @@ const workerController = {
       const { skill_name, photo_url } = req.body;
       const supabase_uid = req.user.id;
 
-      // Get worker_id from supabase_uid
+      // Use limit(1).maybeSingle() to avoid crash on duplicate dev rows
       const { data: worker, error: workerError } = await supabase
         .from('workers')
         .select('id')
         .eq('supabase_uid', supabase_uid)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (workerError) throw workerError;
+      if (!worker) throw new Error('Worker profile not found');
 
       const { data, error } = await supabase
         .from('worker_skills')
-        .insert({ worker_id: worker.id, skill_name })
+        .insert({ worker_id: worker.id, skill_name, photo_url: photo_url || null })
         .select()
         .single();
 
       if (error) throw error;
       res.status(201).json({ success: true, data });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // GET /api/workers/:id/profile — used by ProfileScreen
+  getProfile: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { data, error } = await supabase
+        .from('workers')
+        .select(`
+          *,
+          worker_skills ( skill_name, photo_url )
+        `)
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ success: false, error: 'Worker not found' });
+
+      // Fetch stats: total jobs and avg rating
+      const { data: jobs } = await supabase
+        .from('jobs')
+        .select('id, status')
+        .eq('worker_id', id);
+
+      const total_jobs = jobs ? jobs.filter(j => j.status === 'completed').length : 0;
+      const avg_rating = data.average_rating || null;
+
+      res.status(200).json({ success: true, data: { ...data, stats: { total_jobs, avg_rating } } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // GET /api/workers/earnings — used by DashboardScreen
+  getEarnings: async (req, res) => {
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+      const supabase_uid = req.user.id;
+
+      const { data: worker } = await supabaseAdmin
+        .from('workers')
+        .select('id')
+        .eq('supabase_uid', supabase_uid)
+        .limit(1)
+        .maybeSingle();
+
+      if (!worker) return res.status(404).json({ success: false, error: 'Worker not found' });
+
+      const { data: jobs, error } = await supabaseAdmin
+        .from('jobs')
+        .select('id, budget, created_at, status')
+        .eq('worker_id', worker.id)
+        .eq('status', 'completed');
+
+      if (error) throw error;
+      console.log('Worker ID:', worker.id, 'Jobs length:', jobs?.length, 'Jobs:', jobs);
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const sum = (list) => list.reduce((acc, j) => acc + (Number(j.budget) || 0), 0);
+
+      const todayJobs = jobs.filter(j => new Date(j.created_at) >= todayStart);
+      const weekJobs = jobs.filter(j => new Date(j.created_at) >= weekStart);
+      const monthJobs = jobs.filter(j => new Date(j.created_at) >= monthStart);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          today: sum(todayJobs),
+          week: sum(weekJobs),
+          month: sum(monthJobs),
+          total_completed: jobs.length,
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // GET /api/workers/jobs/history — used by DashboardScreen Recent Jobs
+  getJobHistory: async (req, res) => {
+    try {
+      const supabase_uid = req.user.id;
+
+      const { data: worker } = await supabase
+        .from('workers')
+        .select('id')
+        .eq('supabase_uid', supabase_uid)
+        .limit(1)
+        .maybeSingle();
+
+      if (!worker) return res.status(404).json({ success: false, error: 'Worker not found' });
+
+      const { data, error } = await supabase
+        .from('jobs')
+        .select(`
+          id, status, notes, pincode, amount, created_at,
+          customers ( name, phone )
+        `)
+        .eq('worker_id', worker.id)
+        .in('status', ['completed', 'cancelled'])
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      res.status(200).json({ success: true, data: data || [] });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -110,6 +255,7 @@ const workerController = {
           )
         `)
         .eq('supabase_uid', supabase_uid)
+        .limit(1)
         .maybeSingle();
 
       if (error) throw error;

@@ -1,8 +1,29 @@
 const express = require('express');
 const db = require('../config/db');
 const { verifySupabaseJwt } = require('../middleware/auth');
+const authMiddleware = require('../middleware/authMiddleware');
+const { getSupabaseAdmin } = require('../config/supabase');
 
 const router = express.Router();
+
+// POST /api/customers/ensure — auto-create customer on first booking
+router.post('/ensure', authMiddleware, async (req, res) => {
+  try {
+    const supabase = getSupabaseAdmin();
+    const uid = req.user.id;
+    const phone = req.body.phone || 'unknown';
+
+    const { data: existing } = await supabase
+      .from('customers').select('id').eq('supabase_uid', uid).maybeSingle();
+
+    if (!existing) {
+      await supabase.from('customers').insert({ supabase_uid: uid, name: 'Customer', phone });
+    }
+    res.status(200).json({ success: true });
+  } catch (e) {
+    res.status(200).json({ success: true }); // non-fatal, always proceed
+  }
+});
 
 router.post('/register', verifySupabaseJwt, async (req, res) => {
   const { name, latitude, longitude } = req.body;

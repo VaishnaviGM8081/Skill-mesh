@@ -13,6 +13,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import JobAlertScreen from './screens/JobAlertScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import ActiveJobScreen from './screens/ActiveJobScreen';
 import RoleSelectionScreen from './screens/RoleSelectionScreen';
 
 const Stack = createNativeStackNavigator();
@@ -111,6 +112,23 @@ function MainTabs({ apiState }) {
       </Tab.Screen>
 
       <Tab.Screen
+        name="ActiveJob"
+        options={{
+          tabBarLabel: 'My Job',
+          tabBarIcon: () => (
+            <View>
+              <Text style={{ fontSize: 20 }}>🔧</Text>
+              {apiState.activeJob && (
+                <View style={{ position: 'absolute', top: -2, right: -4, width: 10, height: 10, borderRadius: 5, backgroundColor: '#2E7D32', borderWidth: 1.5, borderColor: '#fff' }} />
+              )}
+            </View>
+          ),
+        }}
+      >
+        {(props) => <ActiveJobScreen {...props} apiState={apiState} />}
+      </Tab.Screen>
+
+      <Tab.Screen
         name="Profile"
         options={{
           tabBarLabel: 'Profile',
@@ -136,24 +154,23 @@ export default function App() {
 
     if (DEV_MODE) {
       if (!token || token !== TEST_WORKER_UID) {
+        // No token yet — show RoleSelection to let dev set the test token
         setInitialRoute('RoleSelection');
         return;
       }
-      
-      try {
-        const headers = { 'Authorization': `Bearer ${TEST_WORKER_UID}` };
-        const res = await fetch(`${API_URL}/api/workers/me`, { headers });
-        const json = await res.json();
-        
-        if (json.success && json.data) {
-          await SecureStore.setItemAsync('workerId', String(json.data.id));
-          setInitialRoute('Main');
-        } else {
-          setInitialRoute('Onboarding');
-        }
-      } catch (e) {
-        setInitialRoute('RoleSelection');
-      }
+      // Token is present — go straight to Main, resolve workerId in background
+      setInitialRoute('Main');
+      // Fire-and-forget: store workerId so ProfileScreen can use it
+      fetch(`${API_URL}/api/workers/me`, {
+        headers: { 'Authorization': `Bearer ${TEST_WORKER_UID}`, 'Content-Type': 'application/json' }
+      })
+        .then(r => r.json())
+        .then(json => {
+          if (json.success && json.data?.id) {
+            SecureStore.setItemAsync('workerId', String(json.data.id));
+          }
+        })
+        .catch(() => {}); // Non-blocking — ignore if backend is down
       return;
     }
 

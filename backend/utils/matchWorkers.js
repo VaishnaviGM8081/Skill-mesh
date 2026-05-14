@@ -22,7 +22,7 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
     // 1. Query available workers from Supabase instead of local pg
     const { data: workers, error } = await supabase
       .from('workers')
-      .select('id, name, trade_category, availability_status, trust_score, pincode')
+      .select('id, name, trade_category, availability_status, trust_score, pincode, average_rating, years_experience, completed_jobs')
       .eq('availability_status', true);
 
     if (error) throw error;
@@ -87,10 +87,13 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
         return {
           id: worker.id,
           name: worker.name,
-          skill_category: worker.skill_category,
+          trade_category: worker.trade_category,
           distance_km: distance_km !== null ? Number(distance_km.toFixed(1)) : null,
           trust_score: trust_score,
-          match_score: Number(match_score.toFixed(2))
+          match_score: Number(match_score.toFixed(2)),
+          average_rating: worker.average_rating || null,
+          years_experience: worker.years_experience || 0,
+          total_jobs: worker.completed_jobs || null,
         };
       });
 

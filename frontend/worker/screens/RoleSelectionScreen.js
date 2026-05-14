@@ -8,7 +8,8 @@ export default function RoleSelectionScreen({ navigation }) {
 
   const handleWorker = async () => {
     await SecureStore.setItemAsync('accessToken', TEST_WORKER_UID);
-    navigation.replace('Onboarding');
+    // DEV: worker profile already exists in DB — skip onboarding, go straight to dashboard
+    navigation.replace('Main');
   };
 
   const handleReset = async () => {

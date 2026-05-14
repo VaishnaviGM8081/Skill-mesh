@@ -17,10 +17,16 @@ import { getAuthHeaders } from '../lib/authFetch';
 import * as SecureStore from 'expo-secure-store';
 
 const TRADES = [
-  { key: 'plumber', label: 'Plumber' },
-  { key: 'electrician', label: 'Electrician' },
-  { key: 'carpenter', label: 'Carpenter' },
-  { key: 'painter', label: 'Painter' },
+  { key: 'plumber', label: '🔧 Plumber' },
+  { key: 'electrician', label: '⚡ Electrician' },
+  { key: 'carpenter', label: '🪵 Carpenter' },
+  { key: 'painter', label: '🎨 Painter' },
+  { key: 'ac_technician', label: '❄️ AC Tech' },
+  { key: 'cleaner', label: '🧹 Cleaner' },
+  { key: 'cook', label: '👨‍🍳 Cook' },
+  { key: 'security', label: '🛡️ Security' },
+  { key: 'driver', label: '🚗 Driver' },
+  { key: 'gardener', label: '🌿 Gardener' },
 ];
 
 export default function OnboardingScreen({ navigation }) {
