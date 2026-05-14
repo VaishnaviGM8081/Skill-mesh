@@ -1,36 +1,73 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity
+  TouchableOpacity, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLanguage } from '../LanguageContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { getAuthHeaders } from '../lib/authFetch';
+import { API_URL } from '../apiConfig';
 
 export default function DashboardScreen({ navigation, apiState }) {
   const { t } = useLanguage();
-  const [isOnline, setIsOnline] = useState(true);
+  const [worker, setWorker] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const worker = {
-    name: 'Raju Kumar',
-    trade: 'Plumber',
-    rating: 4.8,
-    totalJobs: 127,
-    trustLevel: 'Verified ✓',
-  };
+  const loadData = useCallback(async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_URL}/api/workers/me`, { headers });
+      const json = await res.json();
+      if (json.success) {
+        setWorker(json.data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const stats = {
-    todayEarnings: '₹1,250',
-    weekEarnings: '₹6,800',
-    monthEarnings: '₹24,500',
-    completionRate: '96%',
+    todayEarnings: '₹0',
+    weekEarnings: '₹0',
+    monthEarnings: '₹0',
+    completionRate: '100%',
   };
 
-  const recentJobs = [
-    { id: 1, service: 'Plumbing', customer: 'Priya Nair', location: 'HSR Layout', amount: '₹550', status: 'Completed', date: 'Today, 10:30 AM' },
-    { id: 2, service: 'Plumbing', customer: 'Amit Verma', location: 'Indiranagar', amount: '₹400', status: 'Completed', date: 'Today, 8:00 AM' },
-    { id: 3, service: 'Plumbing', customer: 'Sneha Reddy', location: 'Whitefield', amount: '₹300', status: 'Cancelled', date: 'Yesterday' },
-  ];
+  const recentJobs = []; // Fetch from real API later
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#1565C0" />
+      </SafeAreaView>
+    );
+  }
+
+  if (!worker) {
+    return (
+      <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Profile not found. Please complete onboarding.</Text>
+        <TouchableOpacity 
+          style={styles.toggleBar} 
+          onPress={() => navigation.navigate('Onboarding')}
+        >
+          <Text>Go to Onboarding</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const isOnline = worker.availability_status;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -41,7 +78,7 @@ export default function DashboardScreen({ navigation, apiState }) {
           <View>
             <Text style={styles.greeting}>{t.goodMorning}</Text>
             <Text style={styles.workerName}>{worker.name}</Text>
-            <Text style={styles.trade}>{worker.trade} · {worker.trustLevel}</Text>
+            <Text style={styles.trade}>{worker.trade_category} · {worker.trust_score || 0} Trust</Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 8 }}>
             <LanguageSwitcher />
@@ -65,12 +102,12 @@ export default function DashboardScreen({ navigation, apiState }) {
         {/* Rating Row */}
         <View style={styles.ratingRow}>
           <View style={styles.ratingItem}>
-            <Text style={styles.ratingValue}>⭐ {worker.rating}</Text>
+            <Text style={styles.ratingValue}>⭐ {worker.average_rating || '0.0'}</Text>
             <Text style={styles.ratingLabel}>{t.rating}</Text>
           </View>
           <View style={styles.ratingDivider} />
           <View style={styles.ratingItem}>
-            <Text style={styles.ratingValue}>{worker.totalJobs}</Text>
+            <Text style={styles.ratingValue}>{worker.total_jobs || 0}</Text>
             <Text style={styles.ratingLabel}>{t.jobsDone}</Text>
           </View>
           <View style={styles.ratingDivider} />
