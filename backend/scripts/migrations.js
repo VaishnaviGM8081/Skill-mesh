@@ -41,6 +41,8 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    ALTER TABLE workers ADD COLUMN IF NOT EXISTS supabase_uid UUID UNIQUE;
+
     CREATE TABLE IF NOT EXISTS worker_skills (
       worker_id INT REFERENCES workers(id) ON DELETE CASCADE,
       skill_name VARCHAR(100) NOT NULL,
@@ -57,11 +59,17 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS supabase_uid UUID UNIQUE;
+
     CREATE TABLE IF NOT EXISTS jobs (
       id SERIAL PRIMARY KEY,
       customer_id INT REFERENCES customers(id),
       worker_id INT REFERENCES workers(id),
       trade_category trade_category_enum NOT NULL,
+      description TEXT,
+      skill VARCHAR(100),
+      intent VARCHAR(100),
+      urgency VARCHAR(50),
       status job_status_enum DEFAULT 'requested',
       price_offered DECIMAL(10, 2),
       price_final DECIMAL(10, 2),

@@ -1,32 +1,29 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, Alert } from 'react-native';
+import { Text, Alert, View, ActivityIndicator } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { API_URL } from './apiConfig';
+import { getAuthHeaders } from './lib/authFetch';
 
-// Your screens
+import CustomerPhoneAuthScreen from './screens/CustomerPhoneAuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import BookServiceScreen from './screens/BookServiceScreen';
 import JobTrackingScreen from './screens/JobTrackingScreen';
 
-// Real backend URL imported from apiConfig.js
-
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// ── Real API functions from your friend's code ──
-
-// Calls real geo-matching backend
 export const apiRequestLiveMatch = async (search, setMatchedWorker) => {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_URL}/api/jobs/request`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
-        customer_id: 1,
         trade_category: search.toLowerCase(),
-        latitude: 12.9352,  // Koramangala demo coords
+        latitude: 12.9352,
         longitude: 77.6245,
       }),
     });
@@ -42,29 +39,26 @@ export const apiRequestLiveMatch = async (search, setMatchedWorker) => {
         id: json.data.worker.id,
       });
     } else {
-      Alert.alert('No workers found nearby!', 'Try a different service or area.');
+      Alert.alert('No workers found nearby!', json.error || 'Try a different service or area.');
     }
   } catch (e) {
     console.error('Match API Error', e);
-    Alert.alert('Backend offline', 'Running in demo mode.');
+    Alert.alert('Backend offline', 'Could not reach SkillMesh API.');
   }
 };
 
-// Calls real escrow/payment backend
 export const apiConfirmEscrowBooking = async (matchedWorker, setMatchedWorker) => {
   try {
     Alert.alert('Initializing Secure Escrow...');
+    const headers = await getAuthHeaders();
     const paymentReq = await fetch(`${API_URL}/api/gateway/create-order`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount_inr: 450 }), // Mock pricing
+      headers,
+      body: JSON.stringify({ amount_inr: 450 }),
     });
     const orderData = await paymentReq.json();
     if (orderData.success) {
-      Alert.alert(
-        'Escrow Funded! 🎉',
-        `Order ID: ${orderData.order_id}\nWorker is on the way!`
-      );
+      Alert.alert('Escrow Funded! 🎉', `Order ID: ${orderData.order?.id || 'n/a'}\nWorker is on the way!`);
       setMatchedWorker(null);
     }
   } catch (e) {
@@ -72,7 +66,6 @@ export const apiConfirmEscrowBooking = async (matchedWorker, setMatchedWorker) =
   }
 };
 
-// ── Home Screen wrapper that adds real API ──
 function HomeScreenWithAPI({ navigation }) {
   const [matchedWorker, setMatchedWorker] = useState(null);
   const [search, setSearch] = useState('');
@@ -90,7 +83,6 @@ function HomeScreenWithAPI({ navigation }) {
   return <HomeScreen navigation={navigation} apiState={apiState} />;
 }
 
-// ── Bottom tabs ──
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -135,11 +127,65 @@ function MainTabs() {
   );
 }
 
-// ── Root ──
 export default function App() {
+  const [booting, setBooting] = useState(true);
+  const [initialRoute, setInitialRoute] = useState('PhoneAuth');
+
+  const refreshRouteFromStorage = useCallback(async () => {
+    const token = await SecureStore.getItemAsync('accessToken');
+    if (!token) {
+      setInitialRoute('PhoneAuth');
+      return;
+    }
+    try {
+      const headers = await getAuthHeaders();
+      let me = await fetch(`${API_URL}/api/customers/me`, { headers });
+      if (me.status === 404) {
+        const reg = await fetch(`${API_URL}/api/customers/register`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name: 'SkillMesh Customer' }),
+        });
+        const regJson = await reg.json().catch(() => ({}));
+        if (!reg.ok || !regJson.success) {
+          setInitialRoute('PhoneAuth');
+          return;
+        }
+        await SecureStore.setItemAsync('customerId', String(regJson.data.id));
+      } else {
+        const meJson = await me.json().catch(() => ({}));
+        if (!me.ok || !meJson.success) {
+          setInitialRoute('PhoneAuth');
+          return;
+        }
+        await SecureStore.setItemAsync('customerId', String(meJson.data.id));
+      }
+      setInitialRoute('Main');
+    } catch {
+      setInitialRoute('PhoneAuth');
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      await refreshRouteFromStorage();
+      setBooting(false);
+    })();
+  }, [refreshRouteFromStorage]);
+
+  if (booting) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3E5F5' }}>
+        <ActivityIndicator size="large" color="#6A1B9A" />
+        <Text style={{ marginTop: 12, color: '#555' }}>Loading…</Text>
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator key={initialRoute} initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="PhoneAuth" component={CustomerPhoneAuthScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="BookService" component={BookServiceScreen} />
         <Stack.Screen name="JobTracking" component={JobTrackingScreen} />
