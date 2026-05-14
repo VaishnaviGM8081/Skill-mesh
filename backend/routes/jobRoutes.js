@@ -4,6 +4,7 @@ const db = require('../config/db');
 const redisClient = require('../config/redisClient');
 const { verifyCustomer } = require('../middleware/customerContext');
 const { verifyWorker } = require('../middleware/workerContext');
+const { getSupabaseAdmin } = require('../config/supabase');
 
 async function findBestMatch(jobRequest) {
   const { trade_category, latitude, longitude } = jobRequest;
@@ -22,6 +23,73 @@ async function findBestMatch(jobRequest) {
   const { rows } = await db.query(matchedWorkersQuery, [longitude, latitude, trade_category]);
   return rows;
 }
+
+// PHASE 1: Simple Job Posting Persistence
+router.post('/create', async (req, res) => {
+  console.log('Job insert started');
+  try {
+    const {
+      customer_id,
+      category,
+      description,
+      location,
+      budget,
+      urgency,
+      additional_requirements
+    } = req.body;
+
+    // Validate required fields
+    if (!customer_id || !category || !description || !location || budget == null || !urgency) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields',
+      });
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
+    
+    // Insert into Supabase jobs table
+    const { data, error } = await supabaseAdmin
+      .from('jobs')
+      .insert([
+        {
+          customer_id,
+          category,
+          description,
+          location,
+          budget,
+          urgency,
+          additional_requirements,
+          status: 'requested'
+        }
+      ])
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Supabase insert failed:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to insert job into database',
+        error: error.message
+      });
+    }
+
+    console.log('Job inserted successfully');
+    return res.status(200).json({
+      success: true,
+      message: 'Job posted successfully',
+      job_id: data.id
+    });
+  } catch (error) {
+    console.error('Backend error during job insert:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
 
 router.post('/request', verifyCustomer, async (req, res) => {
   const customer_id = req.customer.id;
