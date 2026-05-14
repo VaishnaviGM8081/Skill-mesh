@@ -30,7 +30,7 @@ export default function HomeScreen({ navigation, apiState }) {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.location}>📍 Koramangala, Bengaluru</Text>
+            <Text style={styles.location}>📍 Pattanagere, Bengaluru</Text>
             <Text style={styles.title}>What do you need?</Text>
           </View>
           <View style={styles.avatarBox}>
@@ -80,16 +80,16 @@ export default function HomeScreen({ navigation, apiState }) {
           ))}
         </View>
         {/* Real backend match button */}
-{apiState?.requestLiveMatch && (
-  <TouchableOpacity
-    style={styles.liveMatchBtn}
-    onPress={apiState.requestLiveMatch}
-  >
-    <Text style={styles.liveMatchText}>🤖 Find Live Match (AI)</Text>
-  </TouchableOpacity>
-)}
-        
-        
+        {apiState?.requestLiveMatch && (
+          <TouchableOpacity
+            style={styles.liveMatchBtn}
+            onPress={apiState.requestLiveMatch}
+          >
+            <Text style={styles.liveMatchText}>🤖 Find Live Match (AI)</Text>
+          </TouchableOpacity>
+        )}
+
+
 
         {/* Recent Activity */}
         <Text style={styles.sectionTitle}>Your Recent Jobs</Text>
@@ -177,16 +177,16 @@ const styles = StyleSheet.create({
   },
   ratingText: { fontSize: 12, fontWeight: '600', color: '#F57F17' },
   liveMatchBtn: {
-  backgroundColor: '#6A1B9A',
-  borderRadius: 12,
-  padding: 16,
-  alignItems: 'center',
-  marginBottom: 20,
-},
+    backgroundColor: '#6A1B9A',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
 
-liveMatchText: {
-  color: '#fff',
-  fontSize: 15,
-  fontWeight: '700',
-},
+  liveMatchText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 }); 
