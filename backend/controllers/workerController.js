@@ -1,5 +1,4 @@
-const { getSupabaseAdmin } = require('../config/supabase');
-const supabase = getSupabaseAdmin();
+const { supabase } = require('../config/supabase');
 
 const workerController = {
   createOrUpdateProfile: async (req, res) => {
@@ -7,40 +6,34 @@ const workerController = {
       const { name, phone, trade_category, years_experience, pincode, availability_status } = req.body;
       const supabase_uid = req.user.id;
 
-      let { data: existing } = await supabase
+      // Use limit(1) to safely handle any duplicate rows in dev
+      const { data: rows } = await supabase
         .from('workers')
         .select('id')
         .eq('supabase_uid', supabase_uid)
-        .maybeSingle();
+        .limit(1);
 
-      let query;
+      const existing = rows && rows.length > 0 ? rows[0] : null;
+
+      let data, error;
+
       if (existing) {
-        query = supabase
+        // Update existing worker by id (safer than eq on supabase_uid which may have duplicates)
+        ({ data, error } = await supabase
           .from('workers')
-          .update({
-            name,
-            phone,
-            trade_category,
-            years_experience,
-            pincode,
-            availability_status
-          })
-          .eq('supabase_uid', supabase_uid);
+          .update({ name, phone, trade_category, years_experience, pincode, availability_status })
+          .eq('id', existing.id)
+          .select());
+        // Grab first result if multiple (handles stale dev duplicates)
+        if (Array.isArray(data)) data = data[0];
       } else {
-        query = supabase
+        // Insert new worker
+        ({ data, error } = await supabase
           .from('workers')
-          .insert({
-            supabase_uid,
-            name,
-            phone,
-            trade_category,
-            years_experience,
-            pincode,
-            availability_status
-          });
+          .insert({ supabase_uid, name, phone, trade_category, years_experience, pincode, availability_status })
+          .select()
+          .single());
       }
-
-      const { data, error } = await query.select().single();
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
@@ -65,10 +58,7 @@ const workerController = {
 
       const { data, error } = await supabase
         .from('worker_skills')
-        .insert({
-          worker_id: worker.id,
-          skill_name
-        })
+        .insert({ worker_id: worker.id, skill_name })
         .select()
         .single();
 
@@ -98,7 +88,7 @@ const workerController = {
           )
         `)
         .eq('availability_status', true)
-        .or(`trade_category.ilike.%${query}%,worker_skills.skill_name.ilike.%${query}%`);
+        .or(`trade_category.ilike.%${query}%`);
 
       if (error) throw error;
       res.status(200).json({ success: true, data });
@@ -120,9 +110,9 @@ const workerController = {
           )
         `)
         .eq('supabase_uid', supabase_uid)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "No rows found"
+      if (error) throw error;
       res.status(200).json({ success: true, data: data || null });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });

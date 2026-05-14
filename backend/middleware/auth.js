@@ -1,4 +1,4 @@
-const { getSupabaseAdmin } = require('../config/supabase');
+const { supabase } = require('../config/supabase');
 
 /**
  * Verifies Supabase access_token from Authorization: Bearer <jwt>
@@ -16,7 +16,7 @@ async function verifySupabaseJwt(req, res, next) {
   }
 
   try {
-    const { data, error } = await getSupabaseAdmin().auth.getUser(token);
+    const { data, error } = await supabase.auth.getUser(token);
     if (error || !data?.user) {
       return res.status(401).json({ success: false, data: null, error: error?.message || 'Invalid token' });
     }

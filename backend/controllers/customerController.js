@@ -1,10 +1,10 @@
-const { getSupabaseAdmin } = require('../config/supabase');
-const supabase = getSupabaseAdmin();
+const { supabase } = require('../config/supabase');
 
 const customerController = {
   createOrUpdateProfile: async (req, res) => {
     try {
-      const { name, phone, pincode } = req.body;
+      // Schema: customers has id, supabase_uid, name, phone, created_at only
+      const { name, phone } = req.body;
       const supabase_uid = req.user.id;
 
       let { data: existing } = await supabase
@@ -17,23 +17,12 @@ const customerController = {
       if (existing) {
         query = supabase
           .from('customers')
-          .update({
-            name,
-            phone,
-            pincode,
-            updated_at: new Date()
-          })
+          .update({ name, phone })
           .eq('supabase_uid', supabase_uid);
       } else {
         query = supabase
           .from('customers')
-          .insert({
-            supabase_uid,
-            name,
-            phone,
-            pincode,
-            updated_at: new Date()
-          });
+          .insert({ supabase_uid, name, phone });
       }
 
       const { data, error } = await query.select().single();
