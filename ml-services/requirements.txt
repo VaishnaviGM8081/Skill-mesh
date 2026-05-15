@@ -3,3 +3,7 @@ uvicorn
 scikit-learn
 spacy
 pydantic
+openai
+openai-whisper
+torch
+setuptools

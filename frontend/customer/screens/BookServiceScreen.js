@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Audio } from 'expo-av';
 
 import { API_BASE_URL } from '../apiConfig';
 import { supabase } from '../lib/supabase';
@@ -72,6 +73,10 @@ export default function BookServiceScreen({ route, navigation }) {
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
   const [workers, setWorkers] = useState([]);
   const [isLoadingWorkers, setIsLoadingWorkers] = useState(false);
 
@@ -84,6 +89,73 @@ export default function BookServiceScreen({ route, navigation }) {
     longitude: null,
     pincode: customerPincode,
   };
+
+  async function startRecording() {
+    try {
+      if (recording) {
+        try { await recording.stopAndUnloadAsync(); } catch (e) {}
+        setRecording(null);
+      }
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant microphone access to use voice search.');
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording: newRec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(newRec);
+      setIsRecording(true);
+    } catch (err) { console.error('Failed to start recording', err); }
+  }
+
+  async function stopRecording() {
+    setIsRecording(false);
+    if (!recording) return;
+    
+    let uri;
+    try {
+      await recording.stopAndUnloadAsync();
+      uri = recording.getURI();
+    } catch (e) {
+      console.log('Safe unload failed:', e);
+    }
+    
+    setRecording(null);
+    if (!uri) return;
+
+    try {
+      setIsTranscribing(true);
+      const formData = new FormData();
+      formData.append('audio', { uri, name: 'audio.m4a', type: 'audio/m4a' });
+      
+      console.log('Transcribing audio from URI:', uri);
+      const res = await fetch(`${API_BASE_URL}/api/jobs/transcribe`, {
+        method: 'POST',
+        body: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      
+      const data = await res.json();
+      console.log('Transcribe response:', data);
+      
+      if (data.success) {
+        if (data.text && data.text.trim().length > 0) {
+          setDescription(data.text);
+        } else {
+          Alert.alert('No Speech Detected', 'We couldn\'t hear anything. Please try speaking louder or closer to the mic.');
+        }
+      } else {
+        const errorMsg = data.error || 'Transcription failed on server';
+        console.error('Transcription error:', errorMsg);
+        Alert.alert('Transcription Error', errorMsg);
+      }
+    } catch (err) {
+      console.error('Transcription Network Error:', err);
+      Alert.alert('Transcription Error', 'Network failed: ' + err.message);
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
 
   async function fetchMatchedWorkers(skillToMatch) {
     setIsLoadingWorkers(true);
@@ -341,15 +413,27 @@ export default function BookServiceScreen({ route, navigation }) {
           Describe your problem
         </Text>
 
-        <TextInput
-          style={styles.textArea}
-          placeholder="e.g. Bulb not working in bedroom..."
-          placeholderTextColor="#aaa"
-          multiline
-          numberOfLines={3}
-          value={description}
-          onChangeText={setDescription}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput
+            style={[styles.textArea, { flex: 1, marginRight: 10 }]}
+            placeholder="e.g. Bulb not working in bedroom..."
+            placeholderTextColor="#aaa"
+            multiline
+            numberOfLines={3}
+            value={description}
+            onChangeText={setDescription}
+          />
+          <TouchableOpacity 
+            style={[styles.micBtn, isRecording && styles.micBtnActive]} 
+            onPress={isRecording ? stopRecording : startRecording}
+          >
+            {isTranscribing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.micIcon}>{isRecording ? '⏹️' : '🎙️'}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* NLP Analysis */}
         {isAnalyzing && (
@@ -818,5 +902,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  micBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1565C0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+  },
+  micBtnActive: {
+    backgroundColor: '#d32f2f',
+    transform: [{ scale: 1.1 }],
+  },
+  micIcon: {
+    fontSize: 24,
   },
 });

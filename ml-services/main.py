@@ -1,5 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
+import os
+import tempfile
+import json
+from openai import OpenAI
 import spacy
 from typing import Optional, Dict
 from extractor import extract_job_details
@@ -13,7 +17,7 @@ except OSError:
     nlp = None
 
 class IntentRequest(BaseModel):
-    text: str
+    description: str
 
 class IntentResponse(BaseModel):
     trade_category: Optional[str]
@@ -63,7 +67,7 @@ def extract_endpoint(req: ExtractRequest):
 @app.post("/parse-intent", response_model=IntentResponse)
 def parse_intent(req: IntentRequest):
     # Mock NLP Intent Parsing (Hinglish Support stub)
-    text = req.text.lower()
+    text = req.description.lower()
     trade = None
     urgency = "normal"
     
@@ -114,6 +118,66 @@ def estimate_pricing(req: PricingRequest):
         suggested_price=calc,
         max_price=calc * 1.3
     )
+
+import whisper
+import torch
+
+# Load Whisper model (base model is fast and works well with WAV conversion)
+WHISPER_MODEL_NAME = "base"
+print(f"Loading Whisper model '{WHISPER_MODEL_NAME}'...")
+whisper_model = whisper.load_model(WHISPER_MODEL_NAME)
+
+@app.post("/api/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    try:
+        # Create a temporary file to save the uploaded audio
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as tmp_file:
+            content = await file.read()
+            file_size = len(content)
+            print(f"Received audio file, size: {file_size} bytes")
+            if file_size < 100:
+                return {"text": ""}
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+            
+        print(f"Transcribing audio file: {tmp_path}")
+        
+        # Check if OpenAI API Key is available
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            print("Using OpenAI Whisper API")
+            try:
+                client = OpenAI(api_key=api_key)
+                with open(tmp_path, "rb") as audio_file:
+                    transcript = client.audio.transcriptions.create(
+                        model="whisper-1", 
+                        file=audio_file
+                    )
+                os.unlink(tmp_path)
+                return {"text": transcript.text}
+            except Exception as api_err:
+                print(f"OpenAI API failed: {api_err}")
+
+        # Local Whisper - Convert to WAV first for better compatibility
+        print("Using local Whisper model (converting to WAV)")
+        wav_path = tmp_path.replace(".m4a", ".wav")
+        os.system(f"ffmpeg -y -i {tmp_path} -ar 16000 -ac 1 -c:a pcm_s16le {wav_path} > /dev/null 2>&1")
+        
+        # Initial prompt to guide the model with Hinglish and service context
+        prompt = "I need a plumber or electrician for a leak in my tap or a short circuit. Jaldi aao."
+        result = whisper_model.transcribe(wav_path, initial_prompt=prompt)
+        
+        # Clean up
+        if os.path.exists(tmp_path): os.unlink(tmp_path)
+        if os.path.exists(wav_path): os.unlink(wav_path)
+        
+        return {"text": result["text"].strip()}
+        
+    except Exception as e:
+        print("Transcription error:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Speech-to-text failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
