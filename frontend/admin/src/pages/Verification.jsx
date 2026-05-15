@@ -1,52 +1,101 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function Verification() {
-  const queue = [
-    { worker: 'Manish T.', trade: 'Electrician', upload: 'Wiring Demo.mp4', level: 'Unverified' },
-    { worker: 'David R.', trade: 'Plumber', upload: 'Pipe Fixing.mp4', level: 'Bronze' }
-  ];
+  const [queue, setQueue] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchQueue();
+  }, []);
+
+  const fetchQueue = async () => {
+    try {
+      const res = await fetch('/api/jobs/admin/verify/queue');
+      const json = await res.json();
+      if (json.success) setQueue(json.data);
+    } catch (e) {
+      console.error('Failed to fetch queue', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approveWorker = async (id) => {
+    try {
+      const res = await fetch('/api/jobs/admin/verify/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worker_id: id })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setQueue(queue.filter(w => w.id !== id));
+        alert('Worker verified successfully!');
+      }
+    } catch (e) {
+      alert('Verification failed');
+    }
+  };
+
+  if (loading) return <div className="loading">Loading Queue...</div>;
 
   return (
     <>
       <header className="page-header">
-        <h1>Trust Verifications</h1>
-        <p>Review and assign skill badges to tradespeople</p>
+        <h1>KYC Verification Queue</h1>
+        <p>Review worker documents and grant verified status</p>
       </header>
 
       <div className="glass-panel" style={{ animationDelay: '0.2s' }}>
-        <table>
-          <thead>
-            <tr>
-              <th>Tradesperson</th>
-              <th>Category</th>
-              <th>Current Tier</th>
-              <th>Video Proof</th>
-              <th>Evaluate Badge</th>
-            </tr>
-          </thead>
-          <tbody>
-            {queue.map((v, i) => (
-              <tr key={i}>
-                <td>{v.worker}</td>
-                <td>{v.trade}</td>
-                <td>
-                  <span className={v.level === 'Unverified' ? 'status-badge danger' : 'status-badge warning'}>
-                    {v.level}
-                  </span>
-                </td>
-                <td>
-                  <a href="#" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>▶ {v.upload}</a>
-                </td>
-                <td style={{ display: 'flex', gap: '0.5rem' }}>
-                   <button className="action-btn" style={{ background: '#f59e0b' }}>Award Gold</button>
-                   <button className="action-btn" style={{ background: '#94a3b8' }}>Award Silver</button>
-                   <button className="action-btn" style={{ background: '#b45309' }}>Award Bronze</button>
-                   <button className="action-btn reject">Reject</button>
-                </td>
+        {queue.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+            🎉 No pending verifications!
+          </div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Worker</th>
+                <th>Category</th>
+                <th>ID Document</th>
+                <th>Certificate</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {queue.map((w) => (
+                <tr key={w.id}>
+                  <td>{w.name}</td>
+                  <td>{w.trade_category}</td>
+                  <td>
+                    <a href={w.id_card_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)' }}>
+                      View ID 📄
+                    </a>
+                  </td>
+                  <td>
+                    {w.certificate_url ? (
+                      <a href={w.certificate_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)' }}>
+                        View Cert 📜
+                      </a>
+                    ) : 'N/A'}
+                  </td>
+                  <td>
+                    <button 
+                      className="action-btn" 
+                      style={{ background: '#10b981' }}
+                      onClick={() => approveWorker(w.id)}
+                    >
+                      Approve ✅
+                    </button>
+                    <button className="action-btn reject" style={{ marginLeft: '0.5rem' }}>
+                      Reject ❌
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   );

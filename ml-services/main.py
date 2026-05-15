@@ -179,6 +179,51 @@ async def transcribe_audio(file: UploadFile = File(...)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Speech-to-text failed: {str(e)}")
 
+# Smart Pricing Model (Mock Logic for Bengaluru Market)
+PRICE_MARKET_DATA = {
+    "plumber": {"base": 300, "multiplier": 1.2, "range": (300, 1500)},
+    "electrician": {"base": 250, "multiplier": 1.5, "range": (250, 2000)},
+    "carpenter": {"base": 400, "multiplier": 1.1, "range": (400, 3000)},
+    "painter": {"base": 500, "multiplier": 2.0, "range": (1000, 10000)},
+    "ac_technician": {"base": 450, "multiplier": 1.3, "range": (450, 2500)}
+}
+
+class PriceRequest(BaseModel):
+    category: str
+    description: str
+
+@app.post("/api/price-suggestion")
+async def get_price_suggestion(request: PriceRequest):
+    cat = request.category.lower()
+    desc = request.description.lower()
+    
+    if cat not in PRICE_MARKET_DATA:
+        return {"suggested_min": 300, "suggested_max": 800, "currency": "INR"}
+    
+    data = PRICE_MARKET_DATA[cat]
+    suggested_min = data["base"]
+    
+    # Simple logic: increase price if certain keywords are present
+    if "urgent" in desc or "emergency" in desc:
+        suggested_min += 200
+    if "replacement" in desc or "new" in desc:
+        suggested_min += 300
+    if "repair" in desc:
+        suggested_min += 100
+        
+    suggested_max = int(suggested_min * data["multiplier"])
+    
+    # Clamp to realistic ranges
+    suggested_min = max(suggested_min, data["range"][0])
+    suggested_max = min(suggested_max, data["range"][1])
+    
+    return {
+        "suggested_min": suggested_min,
+        "suggested_max": suggested_max,
+        "currency": "INR",
+        "note": "Based on Bengaluru market averages"
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

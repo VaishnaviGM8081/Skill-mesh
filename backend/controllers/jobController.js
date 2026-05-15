@@ -287,6 +287,34 @@ const jobController = {
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
+  },
+
+  matchWorkers: async (req, res) => {
+    try {
+      const { skill, pincode } = req.query;
+      
+      if (!skill || !pincode) {
+        return res.status(400).json({ success: false, error: 'Skill and pincode are required' });
+      }
+
+      console.log(`Matching workers for skill: ${skill} in pincode: ${pincode}`);
+
+      // Basic filter: trade_category match and same pincode
+      // (Realistic apps would use geo-radius, but for this demo, same pincode = nearby)
+      const { data, error } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('trade_category', skill.toLowerCase())
+        .eq('pincode', pincode)
+        .eq('availability_status', true)
+        .limit(10);
+
+      if (error) throw error;
+
+      res.status(200).json({ success: true, data: data || [] });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 };
 

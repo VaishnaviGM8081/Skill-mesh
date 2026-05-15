@@ -30,34 +30,33 @@ export default function ProfileScreen() {
       const headers = await getAuthHeaders();
       let json;
 
-      // Try by workerId first; fall back to /me if not stored yet
-      const workerId = await SecureStore.getItemAsync('workerId');
+      let workerId = await SecureStore.getItemAsync('workerId');
+      
       if (workerId) {
         const res = await fetch(`${API_URL}/api/workers/${workerId}/profile`, { headers });
         json = await res.json().catch(() => ({}));
       }
 
-      // Fallback to /me if workerId missing or request failed
-      if (!json?.success) {
-        const res2 = await fetch(`${API_URL}/api/workers/me`, { headers });
-        const json2 = await res2.json().catch(() => ({}));
-        if (json2.success && json2.data) {
-          // Store for future use
-          await SecureStore.setItemAsync('workerId', String(json2.data.id));
-          // Wrap into same shape as getProfile response
+      // If failed, try /me (Auto-Sync)
+      if (!json?.success || !json?.data) {
+        const resMe = await fetch(`${API_URL}/api/workers/me`, { headers });
+        const jsonMe = await resMe.json().catch(() => ({}));
+        
+        if (jsonMe.success && jsonMe.data) {
+          await SecureStore.setItemAsync('workerId', String(jsonMe.data.id));
           json = {
             success: true,
             data: {
-              ...json2.data,
-              stats: { total_jobs: 0, avg_rating: json2.data.average_rating || null },
+              ...jsonMe.data,
+              stats: { total_jobs: 0, avg_rating: jsonMe.data.average_rating || null },
             }
           };
         } else {
-          throw new Error(json2.error || 'Failed to load profile');
+          throw new Error('Profile not found. Please complete onboarding.');
         }
       }
 
-      if (!json.success) throw new Error(json.error || 'Failed to load profile');
+      if (!json.success) throw new Error('Failed to load profile');
       setProfile(json.data);
 
       if (json.data?.pincode) {
@@ -229,19 +228,21 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Verification</Text>
         <View style={styles.card}>
           <View style={[styles.verifyRow, styles.verifyBorder]}>
-            <Text style={styles.verifyLabel}>Phone (Supabase)</Text>
-            <View style={[styles.verifyBadge, styles.verifiedBg]}>
-              <Text style={[styles.verifyStatus, styles.verifiedText]}>✓ Signed in</Text>
-            </View>
-          </View>
-          <View style={styles.verifyRow}>
-            <Text style={styles.verifyLabel}>Skill videos</Text>
-            <View style={[styles.verifyBadge, styles.pendingBg]}>
-              <Text style={[styles.verifyStatus, styles.pendingText]}>
-                {skills.filter((s) => s.video_url).length}/{Math.max(skills.length, 1)} uploaded
+            <Text style={styles.verifyLabel}>Status</Text>
+            <View style={[styles.verifyBadge, profile.is_verified ? styles.verifiedBg : styles.pendingBg]}>
+              <Text style={[styles.verifyStatus, profile.is_verified ? styles.verifiedText : styles.pendingText]}>
+                {profile.is_verified ? '✓ Verified' : 'Pending Verification'}
               </Text>
             </View>
           </View>
+          {!profile.is_verified && (
+            <TouchableOpacity 
+              style={styles.getVerifiedBtn} 
+              onPress={() => navigation.navigate('Verification')}
+            >
+              <Text style={styles.getVerifiedBtnText}>🛡️ Get Verified Now</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.sectionTitle}>Details</Text>
@@ -448,4 +449,16 @@ const styles = StyleSheet.create({
     borderColor: '#1565C0',
   },
   editButtonText: { color: '#1565C0', fontSize: 16, fontWeight: '600' },
+  getVerifiedBtn: {
+    backgroundColor: '#1565C0',
+    margin: 14,
+    padding: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  getVerifiedBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
 });

@@ -13,7 +13,7 @@ import BookServiceScreen from './screens/BookServiceScreen';
 import JobTrackingScreen from './screens/JobTrackingScreen';
 import RoleSelectionScreen from './screens/RoleSelectionScreen';
 import CustomerOnboardingScreen from './screens/CustomerOnboardingScreen';
-
+import ChatScreen from './screens/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -206,6 +206,7 @@ export default function App() {
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="BookService" component={BookServiceScreen} />
         <Stack.Screen name="JobTracking" component={JobTrackingScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

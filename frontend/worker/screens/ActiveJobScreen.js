@@ -5,16 +5,61 @@
 import { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, Linking, ActivityIndicator
+  ScrollView, Alert, Linking, ActivityIndicator, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuthHeaders } from '../lib/authFetch';
 import { API_URL } from '../apiConfig';
 
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../lib/supabase';
+
 export default function ActiveJobScreen({ apiState, navigation }) {
   const job = apiState?.activeJob;
   const [completing, setCompleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [photo, setPhoto] = useState(null);
+
+  const pickPhoto = async () => {
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setPhoto(result.assets[0].uri);
+    }
+  };
+
+  const uploadPhoto = async (uri) => {
+    try {
+      const fileName = `completion_${job.id}_${Date.now()}.jpg`;
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        name: fileName,
+        type: 'image/jpeg',
+      });
+
+      const { data, error } = await supabase.storage
+        .from('job-photos')
+        .upload(`completions/${fileName}`, formData, {
+          contentType: 'image/jpeg',
+        });
+
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('job-photos')
+        .getPublicUrl(`completions/${fileName}`);
+
+      return publicUrl;
+    } catch (e) {
+      console.error('Photo upload failed:', e);
+      return null;
+    }
+  };
 
   if (!job) {
     return (
@@ -29,14 +74,26 @@ export default function ActiveJobScreen({ apiState, navigation }) {
   const customer = job.customers || {};
 
   async function updateJobStatus(status, label) {
+    if (status === 'completed' && !photo) {
+      return Alert.alert('Photo Required', 'Please take a photo of the completed work as proof.');
+    }
+
     const setter = status === 'completed' ? setCompleting : setCancelling;
     setter(true);
     try {
+      let completionPhotoUrl = null;
+      if (status === 'completed') {
+        completionPhotoUrl = await uploadPhoto(photo);
+      }
+
       const headers = await getAuthHeaders();
       const res = await fetch(`${API_URL}/api/jobs/${job.id}/status`, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ 
+          status,
+          completion_photo_url: completionPhotoUrl 
+        }),
       });
       const json = await res.json();
       if (!json.success) {
@@ -107,6 +164,12 @@ export default function ActiveJobScreen({ apiState, navigation }) {
               <Text style={styles.customerName}>{customer.name || 'Customer'}</Text>
               <Text style={styles.customerPhone}>{customer.phone || 'Phone not available'}</Text>
             </View>
+            <TouchableOpacity 
+              style={styles.chatBtn} 
+              onPress={() => navigation.navigate('Chat', { jobId: job.id, customerName: customer.name })}
+            >
+              <Text style={{fontSize: 20}}>💬</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.contactRow}>
@@ -117,6 +180,23 @@ export default function ActiveJobScreen({ apiState, navigation }) {
               <Text style={styles.dirBtnText}>🗺  Directions</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Proof of Work */}
+        <Text style={styles.sectionTitle}>Proof of Work (Required to Complete)</Text>
+        <View style={styles.card}>
+          <TouchableOpacity 
+            style={[styles.photoBtn, photo && styles.photoBtnActive]} 
+            onPress={pickPhoto}
+          >
+            <Text style={{fontSize: 24}}>📷</Text>
+            <Text style={styles.photoBtnText}>
+              {photo ? 'Photo Captured' : 'Take Completion Photo'}
+            </Text>
+          </TouchableOpacity>
+          {photo && (
+            <Image source={{ uri: photo }} style={styles.photoPreview} />
+          )}
         </View>
 
         {/* Job Details */}
@@ -212,4 +292,42 @@ const styles = StyleSheet.create({
   completeBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   cancelBtn: { backgroundColor: '#fff', borderRadius: 14, padding: 18, alignItems: 'center', borderWidth: 1.5, borderColor: '#C62828', marginBottom: 10 },
   cancelBtnText: { color: '#C62828', fontSize: 17, fontWeight: '600' },
+  photoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#1565C0',
+    borderStyle: 'dashed',
+    marginBottom: 12,
+  },
+  photoBtnActive: {
+    borderColor: '#2E7D32',
+    backgroundColor: '#E8F5E9',
+    borderStyle: 'solid',
+  },
+  photoBtnText: {
+    color: '#1565C0',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  photoPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  chatBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#C8E6C9'
+  }
 });

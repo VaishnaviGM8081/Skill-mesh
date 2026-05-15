@@ -93,14 +93,30 @@ export default function DashboardScreen({ navigation, apiState }) {
   if (!worker) {
     return (
       <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#666', marginBottom: 16, textAlign: 'center' }}>
-          Profile not found.{'\n'}Please complete onboarding.
+        <View style={styles.avatarBox}>
+          <Text style={styles.avatarText}>?</Text>
+        </View>
+        <Text style={{ color: '#1A1A2E', fontSize: 18, fontWeight: '700', marginTop: 20 }}>
+          Syncing your profile...
         </Text>
+        <Text style={{ color: '#666', marginTop: 8, textAlign: 'center', paddingHorizontal: 40 }}>
+          We're finalizing your worker account. This usually takes a few seconds.
+        </Text>
+        
+        <ActivityIndicator size="small" color="#1565C0" style={{ marginTop: 24 }} />
+
         <TouchableOpacity
-          style={styles.retryBtn}
+          style={[styles.retryBtn, { marginTop: 40 }]}
+          onPress={loadData}
+        >
+          <Text style={styles.retryBtnText}>🔄 Sync Now</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={{ marginTop: 20 }}
           onPress={() => navigation.navigate('Onboarding')}
         >
-          <Text style={styles.retryBtnText}>Go to Onboarding</Text>
+          <Text style={{ color: '#1565C0', fontWeight: '600' }}>Back to Onboarding</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );

@@ -1,15 +1,33 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '../apiConfig';
 
 export default function RoleSelectionScreen({ navigation }) {
   // TEMP DEV AUTH MODE
   const TEST_WORKER_UID = "11111111-1111-1111-1111-111111111111";
 
   const handleWorker = async () => {
-    await SecureStore.setItemAsync('accessToken', TEST_WORKER_UID);
-    // DEV: worker profile already exists in DB — skip onboarding, go straight to dashboard
-    navigation.replace('Main');
+    try {
+      await SecureStore.setItemAsync('accessToken', TEST_WORKER_UID);
+      
+      // Fetch profile to get the real DB ID
+      const res = await fetch(`${API_URL}/api/workers/me`, {
+        headers: { Authorization: `Bearer ${TEST_WORKER_UID}` }
+      });
+      const json = await res.json();
+      
+      if (json.success && json.data) {
+        await SecureStore.setItemAsync('workerId', String(json.data.id));
+        navigation.replace('Main');
+      } else {
+        // If profile doesn't exist, go to onboarding
+        navigation.replace('Onboarding');
+      }
+    } catch (e) {
+      console.error('Demo Login Error:', e);
+      navigation.replace('Onboarding');
+    }
   };
 
   const handleReset = async () => {

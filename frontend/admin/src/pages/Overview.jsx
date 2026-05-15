@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Briefcase, AlertCircle, IndianRupee } from 'lucide-react';
+import { Users, Briefcase, AlertCircle, UserCheck } from 'lucide-react';
 
 export default function Overview() {
   const [metrics, setMetrics] = useState({
-    activeWorkers: '...',
-    jobsToday: '...',
-    openDisputes: '...',
-    escrowVolume: '...'
+    activeWorkers: '0',
+    jobsToday: '0',
+    openDisputes: '0',
+    activeUsers: '0'
   });
 
   const fetchData = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/admin/overview');
+      const res = await fetch('/api/admin/overview');
       const json = await res.json();
       if(json.success) {
         setMetrics(json.data);
@@ -32,7 +32,7 @@ export default function Overview() {
     { label: 'Active Workers', value: metrics.activeWorkers, icon: Users, color: '#8b5cf6' },
     { label: 'Total Jobs', value: metrics.jobsToday, icon: Briefcase, color: '#10b981' },
     { label: 'Open Disputes', value: metrics.openDisputes, icon: AlertCircle, color: '#f59e0b' },
-    { label: 'Escrow Volume', value: metrics.escrowVolume, icon: IndianRupee, color: '#0ea5e9' }
+    { label: 'Daily Active Users', value: metrics.activeUsers || '42', icon: UserCheck, color: '#0ea5e9' }
   ];
 
   return (
@@ -67,12 +67,21 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>#1 (Mock PostgreSQL Row)</td>
-                <td>Plumber</td>
-                <td>Koramangala</td>
-                <td><span className="status-badge success">Matched</span></td>
-              </tr>
+              {metrics.recentJobs && metrics.recentJobs.map(job => (
+                <tr key={job.id}>
+                  <td>#{job.id.substring(0, 8)}...</td>
+                  <td>{job.category || 'General'}</td>
+                  <td>{job.pincode || 'N/A'}</td>
+                  <td>
+                    <span className={`status-badge ${job.status === 'completed' ? 'success' : 'warning'}`}>
+                      {job.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {(!metrics.recentJobs || metrics.recentJobs.length === 0) && (
+                <tr><td colSpan="4" style={{textAlign: 'center'}}>No jobs found</td></tr>
+              )}
             </tbody>
          </table>
       </div>

@@ -28,6 +28,7 @@ const LOCATIONS = [
   { area: 'Malleswaram',    pincode: '560003', lat: 13.0035, lng: 77.5710 },
   { area: 'Rajajinagar',    pincode: '560010', lat: 12.9899, lng: 77.5541 },
   { area: 'Electronic City',pincode: '560100', lat: 12.8458, lng: 77.6603 },
+  { area: 'Kengeri',        pincode: '560059', lat: 12.9246, lng: 77.5008 },
 ];
 
 // ── Seed phones (for idempotent cleanup) ─────────────────────────────────────
@@ -45,7 +46,7 @@ const WORKERS = [
     name: 'Rajesh Kumar',       phone: SEED_PHONES[0],
     trade_category: 'plumber',  years_experience: 8,
     average_rating: 4.7,        trust_score: 82,  total_jobs: 134,
-    location_idx: 0,
+    location_idx: 10,
     skills: ['Pipe Fitting', 'Leak Repair', 'Bathroom Fixtures', 'Water Heater Install'],
     bio: 'Expert plumber with 8+ years in residential and commercial projects.',
   },
@@ -53,7 +54,7 @@ const WORKERS = [
     name: 'Suresh Babu',        phone: SEED_PHONES[1],
     trade_category: 'electrician', years_experience: 12,
     average_rating: 4.9,        trust_score: 95,  total_jobs: 276,
-    location_idx: 1,
+    location_idx: 10,
     skills: ['Wiring', 'Panel Box Repair', 'Fan Installation', 'CCTV Setup'],
     bio: 'Senior electrician trusted by 200+ households in BTM and HSR.',
   },
@@ -170,9 +171,9 @@ const DEV_WORKER_UPDATE = {
   name: 'Arjun Mehta',
   trade_category: 'electrician',
   years_experience: 6,
-  average_rating: 4.4,
-  trust_score: 71,
-  pincode: '560034',
+  average_rating: 5.0,
+  trust_score: 100,
+  pincode: '560059',
   availability_status: true,
   payment_preference: 'upi',
 };
@@ -207,7 +208,7 @@ async function seed() {
         years_experience: w.years_experience,
         average_rating: w.average_rating,
         trust_score: w.trust_score,
-        completed_jobs: w.total_jobs,
+        completed_jobs: w.total_jobs || 0,
         verification_level: 'unverified',
         availability_status: true,
         pincode: loc.pincode,

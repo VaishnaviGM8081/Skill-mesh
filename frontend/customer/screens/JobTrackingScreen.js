@@ -185,6 +185,12 @@ export default function JobTrackingScreen({ route, navigation }) {
               ⭐ {job.workers?.average_rating || '—'} · Verified ✓
             </Text>
           </View>
+          <TouchableOpacity 
+            style={styles.chatBtn} 
+            onPress={() => navigation.navigate('Chat', { jobId: job.id, workerName: job.workers?.name })}
+          >
+            <Text style={{fontSize: 20}}>💬</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Escrow Banner */}
@@ -323,4 +329,14 @@ const styles = StyleSheet.create({
   reviewInput: { backgroundColor: '#F5F7FA', borderRadius: 12, padding: 14, fontSize: 14, color: '#333', marginBottom: 20, textAlignVertical: 'top', minHeight: 80 },
   submitBtn: { backgroundColor: '#1565C0', borderRadius: 14, padding: 18, alignItems: 'center' },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  chatBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F0F4FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E3F2FD'
+  }
 });

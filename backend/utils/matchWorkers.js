@@ -18,6 +18,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 async function matchWorkers(customerLat, customerLng, requiredSkill, customerPincode = null) {
+  console.log(`Matching for Skill: ${requiredSkill}, Pincode: ${customerPincode}`);
   try {
     // 1. Query available workers from Supabase instead of local pg
     const { data: workers, error } = await supabase
@@ -29,8 +30,6 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
   availability_status,
   trust_score,
   pincode,
-  latitude,
-  longitude,
   average_rating,
   years_experience,
   completed_jobs
@@ -39,7 +38,10 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
 
     if (error) throw error;
 
+    console.log(`Matching process started. Total available workers fetched: ${workers?.length || 0}`);
+
     if (!workers || workers.length === 0) {
+      console.log('No workers found in DB with availability_status = true');
       return [];
     }
 
@@ -78,7 +80,7 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
           }
         } else if (worker.pincode != null && customerPincode != null) {
           // Fallback to pincode-based worker matching
-          if (worker.pincode === customerPincode) {
+          if (String(worker.pincode).trim() === String(customerPincode).trim()) {
             // Assume 5km average distance for same pincode
             distance_km = 5;
             distance_score = 0.8;
@@ -109,7 +111,7 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
           match_score: Number(match_score.toFixed(2)),
           average_rating: worker.average_rating || null,
           years_experience: worker.years_experience || 0,
-          total_jobs: worker.completed_jobs || null,
+          total_jobs: worker.completed_jobs || 0,
         };
       });
 
@@ -117,7 +119,9 @@ async function matchWorkers(customerLat, customerLng, requiredSkill, customerPin
     matchedWorkers.sort((a, b) => b.match_score - a.match_score);
 
     // 6. Return top 20 matching workers
-    return matchedWorkers.slice(0, 20);
+    const finalResults = matchedWorkers.slice(0, 20);
+    console.log(`Returning ${finalResults.length} matched workers to the app.`);
+    return finalResults;
   } catch (error) {
     console.error('Error matching workers:', error);
     throw error;

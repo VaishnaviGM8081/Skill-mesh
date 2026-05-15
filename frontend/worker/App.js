@@ -15,6 +15,8 @@ import JobAlertScreen from './screens/JobAlertScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import ActiveJobScreen from './screens/ActiveJobScreen';
 import RoleSelectionScreen from './screens/RoleSelectionScreen';
+import VerificationScreen from './screens/VerificationScreen';
+import ChatScreen from './screens/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -143,21 +145,11 @@ function MainTabs({ apiState }) {
 
 export default function App() {
   const [booting, setBooting] = useState(true);
-  const [initialRoute, setInitialRoute] = useState('PhoneAuth');
+  const [initialRoute, setInitialRoute] = useState('RoleSelection');
 
   const refreshRouteFromStorage = useCallback(async () => {
-    // TEMP DEV AUTH MODE
-    const DEV_MODE = false;
-    const TEST_WORKER_UID = "11111111-1111-1111-1111-111111111111";
-
-    const token = await SecureStore.getItemAsync('accessToken');
-
-    if (!token) setInitialRoute('PhoneAuth');
-    else {
-      const workerId = await SecureStore.getItemAsync('workerId');
-      if (!workerId) setInitialRoute('Onboarding');
-      else setInitialRoute('Main');
-    }
+    // FORCE DEMO MODE: Always show RoleSelection screen for now
+    setInitialRoute('RoleSelection');
   }, []);
 
   useEffect(() => {
@@ -223,6 +215,8 @@ export default function App() {
           <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} />
           <Stack.Screen name="PhoneAuth" component={PhoneAuthScreen} />
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen name="Verification" component={VerificationScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Main">{(props) => <MainTabs {...props} apiState={apiState} />}</Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>

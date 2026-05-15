@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import {
   View,
   Text,
@@ -9,6 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { Audio } from 'expo-av';
 
@@ -72,16 +74,30 @@ export default function BookServiceScreen({ route, navigation }) {
   const [selected, setSelected] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  const [recording, setRecording] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [image, setImage] = useState(null);
+  const [suggestedPrice, setSuggestedPrice] = useState(null);
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
 
   const [workers, setWorkers] = useState([]);
   const [isLoadingWorkers, setIsLoadingWorkers] = useState(false);
 
   const [isEditingLocation, setIsEditingLocation] = useState(false);
-  const [customerPincode, setCustomerPincode] = useState('560001');
+  const [customerPincode, setCustomerPincode] = useState('560059');
 
   // Customer location state
   const customerLocation = {
@@ -162,18 +178,21 @@ export default function BookServiceScreen({ route, navigation }) {
 
     try {
       const skillQuery = skillToMatch.toLowerCase();
+      const url = `${API_BASE_URL}/api/jobs/match-workers?skill=${skillQuery}&pincode=${customerLocation.pincode}`;
+      console.log('Fetching workers from:', url);
 
-      const rawRes = await fetch(
-        `${API_BASE_URL}/api/jobs/match-workers?skill=${skillQuery}&pincode=${customerLocation.pincode}`,
-        {
-          method: 'GET',
-        }
-      );
+      const rawRes = await fetch(url).catch(err => {
+        throw new Error(`Connection failed! Check Wi-Fi or IP: ${API_BASE_URL}`);
+      });
 
+      if (!rawRes.ok) throw new Error(`Server Error: ${rawRes.status}`);
+      
       const res = await rawRes.json();
+      const workersList = res.workers || res.data || [];
+      console.log('Found workers:', workersList.length);
 
-      if (res.success) {
-        const mapped = res.workers.map((w) => {
+      if (workersList.length > 0) {
+        const mapped = workersList.map((w) => {
           // ── Realistic price by trade + experience ──────────────────────────
           const BASE_RATES = {
             plumber: { base: 300, perYear: 30 },
@@ -265,19 +284,20 @@ export default function BookServiceScreen({ route, navigation }) {
   useEffect(() => {
     if (description.length < 5) {
       setAnalysis(null);
+      setSuggestedPrice(null);
       return;
     }
 
     const timer = setTimeout(async () => {
+      // 1. Local category detection
+      const localSkill = detectCategory(description);
+
+      // 2. Call ML Service for NLP Analysis & Price Suggestion
       setIsAnalyzing(true);
-
       try {
-        // Local smart detection
-        const localSkill = detectCategory(description);
-
-        // Backend NLP
+        // NLP Analysis
         const res = await fetch(
-          `${API_BASE_URL}/api/jobs/analyze`,
+          `${API_BASE_URL.replace('3000', '8000')}/api/analyze-job`,
           {
             method: 'POST',
             headers: {
@@ -288,6 +308,21 @@ export default function BookServiceScreen({ route, navigation }) {
         );
 
         const data = await res.json();
+
+        // Price Suggestion
+        const priceRes = await fetch(
+          `${API_BASE_URL.replace('3000', '8000')}/api/price-suggestion`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              category: localSkill || data.data?.skill || service.name, 
+              description 
+            }),
+          }
+        );
+        const priceData = await priceRes.json();
+        setSuggestedPrice(priceData);
 
         if (data.success) {
           // Prefer local detection if available
@@ -321,10 +356,45 @@ export default function BookServiceScreen({ route, navigation }) {
 
   const [isBooking, setIsBooking] = useState(false);
 
+  const uploadImage = async (uri) => {
+    try {
+      const fileName = `${Date.now()}.jpg`;
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        name: fileName,
+        type: 'image/jpeg',
+      });
+
+      const { data, error } = await supabase.storage
+        .from('job-photos')
+        .upload(`problems/${fileName}`, formData, {
+          contentType: 'image/jpeg',
+        });
+
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('job-photos')
+        .getPublicUrl(`problems/${fileName}`);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Image upload failed:', error);
+      return null;
+    }
+  };
+
   async function handleBook() {
     if (!selected) return;
     setIsBooking(true);
     try {
+      // 1. Upload photo if exists
+      let photoUrl = null;
+      if (image) {
+        photoUrl = await uploadImage(image);
+      }
+
       // ── Get Supabase session token (Customer App uses Supabase auth) ──
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -357,6 +427,7 @@ export default function BookServiceScreen({ route, navigation }) {
           notes: description || null,
           amount: parseInt(rawPrice, 10) || null,
           trade_category: service.name.toLowerCase(),
+          problem_photo_url: photoUrl,
         }),
       });
 
@@ -412,6 +483,36 @@ export default function BookServiceScreen({ route, navigation }) {
         <Text style={styles.label}>
           Describe your problem
         </Text>
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Or type the problem here..."
+            placeholderTextColor="#94a3b8"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+          />
+        </View>
+
+        <TouchableOpacity 
+          style={[styles.photoButton, image && styles.photoButtonActive]} 
+          onPress={pickImage}
+        >
+          <Text style={{fontSize: 24}}>📷</Text>
+          <Text style={[styles.photoButtonText, image && {color: '#10b981'}]}>
+            {image ? "Photo Added!" : "Add Photo of Problem"}
+          </Text>
+        </TouchableOpacity>
+
+        {image && (
+          <View style={styles.imagePreviewContainer}>
+            <Image source={{ uri: image }} style={styles.imagePreview} />
+            <TouchableOpacity style={styles.removeImage} onPress={() => setImage(null)}>
+              <Text style={{color: 'white', fontWeight: 'bold'}}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <TextInput
@@ -469,6 +570,17 @@ export default function BookServiceScreen({ route, navigation }) {
                 Urgency:
               </Text>{' '}
               {analysis.urgency}
+            </Text>
+          </View>
+        )}
+
+        {suggestedPrice && (
+          <View style={styles.priceBadge}>
+            <Text style={styles.priceBadgeText}>
+              💡 Suggested Price: ₹{suggestedPrice.suggested_min} - ₹{suggestedPrice.suggested_max}
+            </Text>
+            <Text style={styles.priceBadgeSub}>
+              {suggestedPrice.note}
             </Text>
           </View>
         )}
@@ -918,5 +1030,69 @@ const styles = StyleSheet.create({
   },
   micIcon: {
     fontSize: 24,
+  },
+  photoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+    gap: 10,
+  },
+  photoButtonActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  photoButtonText: {
+    color: '#8b5cf6',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+  },
+  removeImage: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  priceBadge: {
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#ffedd5',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+    flexDirection: 'column',
+  },
+  priceBadgeText: {
+    color: '#9a3412',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  priceBadgeSub: {
+    color: '#c2410c',
+    fontSize: 11,
+    marginTop: 2,
+    fontStyle: 'italic',
   },
 });
