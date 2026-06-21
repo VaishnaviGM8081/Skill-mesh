@@ -159,6 +159,19 @@ export default function App() {
     })();
   }, [refreshRouteFromStorage]);
 
+  useEffect(() => {
+    console.log('APP API_URL', API_URL);
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/health`);
+        const text = await res.text();
+        console.log('Health check from app:', text);
+      } catch (e) {
+        console.error('Health check failed from app:', e);
+      }
+    })();
+  }, []);
+
   const [isOnline, setIsOnline] = useState(false);
   const [jobAlert, setJobAlert] = useState(null);
   const [activeJob, setActiveJob] = useState(null);

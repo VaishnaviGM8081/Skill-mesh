@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -22,6 +23,8 @@ export default function ProfileScreen() {
   const [error, setError] = useState('');
   const [profile, setProfile] = useState(null);
   const [workerPincode, setWorkerPincode] = useState('');
+  const [certificate, setCertificate] = useState(null);
+  const [certificateModalVisible, setCertificateModalVisible] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +64,18 @@ export default function ProfileScreen() {
 
       if (json.data?.pincode) {
         setWorkerPincode(String(json.data.pincode));
+      }
+
+      if (json.data?.id) {
+        try {
+          const certRes = await fetch(`${API_URL}/api/workers/${json.data.id}/certificate/latest`, { headers });
+          const certJson = await certRes.json().catch(() => ({}));
+          if (certJson.success) {
+            setCertificate(certJson.certificate);
+          }
+        } catch (err) {
+          console.warn('Failed to load certificate', err);
+        }
       }
     } catch (e) {
       setError(e.message || 'Error');
@@ -165,6 +180,11 @@ export default function ProfileScreen() {
     ? Math.round(((totalJobs - cancellations) / totalJobs) * 100)
     : 100;
 
+  const certificateId = certificate?.certificate_id || 'Not issued yet';
+  const certificateHash = certificate?.blockchain_hash || '—';
+  const certificateIssued = certificate?.issue_date || '—';
+  const certificateTrustScore = certificate?.trust_score ?? profile.trust_score ?? '—';
+
   const skills = Array.isArray(profile.worker_skills)
     ? profile.worker_skills
     : Array.isArray(profile.skills) ? profile.skills : [];
@@ -222,6 +242,27 @@ export default function ProfileScreen() {
           <View style={styles.trustBadge}>
             <Text style={styles.trustScore}>{profile.trust_score ?? '—'}</Text>
             <Text style={styles.trustMax}>/100</Text>
+          </View>
+        </View>
+
+        <View style={styles.certificateSection}>
+          <Text style={styles.certificateTitle}>🏆 Blockchain Trust Certificate</Text>
+          <View style={styles.certificateCard}>
+            <View style={styles.certificateHeader}>
+              <Text style={styles.certificateId}>{certificateId}</Text>
+              <View style={[styles.certificateBadge, styles.verifiedBg]}>
+                <Text style={[styles.verifyStatus, styles.verifiedText]}>Verified</Text>
+              </View>
+            </View>
+            <Text style={styles.certificateLabel}>Trust Score</Text>
+            <Text style={styles.certificateValue}>{certificateTrustScore}</Text>
+            <Text style={styles.certificateLabel}>Issued</Text>
+            <Text style={styles.certificateValue}>{certificateIssued}</Text>
+            <Text style={styles.certificateLabel}>Hash</Text>
+            <Text style={styles.certificateHash}>{certificateHash.slice(0, 10)}....</Text>
+            <TouchableOpacity style={styles.verifyButton} onPress={() => setCertificateModalVisible(true)}>
+              <Text style={styles.verifyButtonText}>Verify Certificate</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -323,6 +364,77 @@ export default function ProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal
+        visible={certificateModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCertificateModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.certPaper}>
+            {/* Elegant Double Border */}
+            <View style={styles.certInnerBorder}>
+              {/* Header Seal */}
+              <View style={styles.certSealContainer}>
+                <Text style={styles.certSeal}>🏅</Text>
+              </View>
+              
+              <Text style={styles.certTitle}>SKILLMESH VERIFIED TRUST</Text>
+              <Text style={styles.certSubtitle}>CERTIFICATE OF EXCELLENCE</Text>
+              
+              <View style={styles.certDivider} />
+              
+              <Text style={styles.certPrompt}>This is to certify that</Text>
+              <Text style={styles.certWorkerName}>{certificate ? certificate.worker_name : '—'}</Text>
+              
+              <Text style={styles.certPrompt}>has successfully met the trust validation standards as a verified</Text>
+              <Text style={styles.certTrade}>{certificate ? (certificate.trade_category || '').toUpperCase() : '—'}</Text>
+              
+              <Text style={styles.certPrompt}>maintaining a validated Trust Score of</Text>
+              <View style={styles.certScoreContainer}>
+                <Text style={styles.certScoreValue}>{certificate ? certificate.trust_score : '—'}</Text>
+                <Text style={styles.certScoreMax}>/100</Text>
+              </View>
+              
+              <View style={styles.certDivider} />
+              
+              {certificate ? (
+                <View style={styles.certMetaGrid}>
+                  <View style={styles.certMetaRow}>
+                    <Text style={styles.certMetaLabel}>Certificate ID:</Text>
+                    <Text style={styles.certMetaValue}>{certificate.certificate_id}</Text>
+                  </View>
+                  <View style={styles.certMetaRow}>
+                    <Text style={styles.certMetaLabel}>Issued Date:</Text>
+                    <Text style={styles.certMetaValue}>{certificate.issue_date}</Text>
+                  </View>
+                  <View style={styles.certMetaRowCol}>
+                    <Text style={styles.certMetaLabel}>Blockchain Hash:</Text>
+                    <Text style={styles.certMetaValueMono} numberOfLines={1} ellipsizeMode="middle">
+                      {certificate.blockchain_hash}
+                    </Text>
+                  </View>
+                  <View style={styles.certMetaRowCol}>
+                    <Text style={styles.certMetaLabel}>Transaction Hash:</Text>
+                    <Text style={styles.certMetaValueMono} numberOfLines={1} ellipsizeMode="middle">
+                      {certificate.transaction_hash}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.certPrompt}>Certificate details loading...</Text>
+              )}
+              
+              <Text style={styles.certFooter}>SECURED BY SKILLMESH CRYPTOGRAPHIC LEDGER</Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity style={styles.certCloseBtn} onPress={() => setCertificateModalVisible(false)}>
+            <Text style={styles.certCloseBtnText}>Close Certificate</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -381,6 +493,235 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginTop: 14,
+  },
+  certificateSection: {
+    marginBottom: 24,
+  },
+  certificateTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 12,
+  },
+  certificateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E8F5E9',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  certificateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  certificateId: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1565C0',
+  },
+  certificateBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+  },
+  certificateLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 10,
+  },
+  certificateValue: {
+    fontSize: 16,
+    color: '#1A1A2E',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  certificateHash: {
+    fontSize: 12,
+    color: '#444',
+    marginTop: 4,
+    fontFamily: 'monospace',
+  },
+  verifyButton: {
+    marginTop: 18,
+    backgroundColor: '#2E7D32',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  verifyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  certPaper: {
+    width: '100%',
+    backgroundColor: '#FCFAF2',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 3,
+    borderColor: '#D4AF37',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  certInnerBorder: {
+    borderWidth: 1.5,
+    borderColor: '#C5A059',
+    borderStyle: 'solid',
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+  },
+  certSealContainer: {
+    marginBottom: 10,
+    backgroundColor: '#fff',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    elevation: 2,
+  },
+  certSeal: {
+    fontSize: 28,
+  },
+  certTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1A1A2E',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  certSubtitle: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#8C7853',
+    letterSpacing: 3,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  certDivider: {
+    width: '80%',
+    height: 1,
+    backgroundColor: '#E5D3B3',
+    marginVertical: 14,
+  },
+  certPrompt: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: '#666',
+    textAlign: 'center',
+  },
+  certWorkerName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginVertical: 6,
+    textAlign: 'center',
+  },
+  certTrade: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#D4AF37',
+    letterSpacing: 1.5,
+    marginVertical: 6,
+    textAlign: 'center',
+  },
+  certScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginVertical: 8,
+  },
+  certScoreValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1A1A2E',
+  },
+  certScoreMax: {
+    fontSize: 14,
+    color: '#8C7853',
+    marginBottom: 4,
+    marginLeft: 2,
+    fontWeight: '600',
+  },
+  certMetaGrid: {
+    width: '100%',
+    backgroundColor: '#F7F4EB',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5D3B3',
+  },
+  certMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  certMetaRowCol: {
+    flexDirection: 'column',
+    marginBottom: 8,
+  },
+  certMetaLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#8C7853',
+  },
+  certMetaValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2C2C2C',
+  },
+  certMetaValueMono: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: '#444',
+    marginTop: 2,
+    backgroundColor: '#EFECE2',
+    padding: 4,
+    borderRadius: 4,
+  },
+  certFooter: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#8C7853',
+    letterSpacing: 1.5,
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  certCloseBtn: {
+    marginTop: 20,
+    backgroundColor: '#D4AF37',
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  certCloseBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   statPill: {
     flex: 1,

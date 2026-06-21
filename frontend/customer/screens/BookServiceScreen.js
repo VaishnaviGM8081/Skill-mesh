@@ -297,7 +297,7 @@ export default function BookServiceScreen({ route, navigation }) {
       try {
         // NLP Analysis
         const res = await fetch(
-          `${API_BASE_URL.replace('3000', '8000')}/api/analyze-job`,
+          `${API_BASE_URL}/api/jobs/analyze`,
           {
             method: 'POST',
             headers: {
@@ -311,7 +311,7 @@ export default function BookServiceScreen({ route, navigation }) {
 
         // Price Suggestion
         const priceRes = await fetch(
-          `${API_BASE_URL.replace('3000', '8000')}/api/price-suggestion`,
+          `${API_BASE_URL}/api/jobs/price-suggestion`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

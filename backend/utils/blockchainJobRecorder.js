@@ -4,97 +4,98 @@ const {
   calculateTrustScore,
 } = require('./trustScore');
 
-function generateSHA256RecordHash({ jobId, workerId, workerName, trustScore, completedJobs, timestamp }) {
-  const payload = `${jobId}-${workerId}-${workerName}-${trustScore}-${completedJobs}-${timestamp}`;
+function generateSHA256RecordHash({ jobId, workerId, workerName, trustScore, timestamp }) {
+  const payload = `${jobId}-${workerId}-${workerName}-${trustScore}-${timestamp}`;
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
 
 async function recordCompletedJobOnChain(jobId, overrides = {}) {
-  const supabase = getSupabaseAdmin();
+  try {
+    const supabase = getSupabaseAdmin();
 
-  const { data: job, error: jobError } = await supabase
-    .from('jobs')
-    .select('id, worker_id, status, created_at, completed_at')
-    .eq('id', jobId)
-    .maybeSingle();
+    const { data: job, error: jobError } = await supabase
+      .from('jobs')
+      .select('id, worker_id, status, created_at')
+      .eq('id', jobId)
+      .maybeSingle();
 
-  if (jobError) throw jobError;
-  if (!job) throw new Error('Job not found');
-  if (job.status !== 'completed') throw new Error('Job must be completed before recording on blockchain');
+    if (jobError) throw jobError;
+    if (!job) throw new Error('Job not found');
+    if (job.status !== 'completed') throw new Error('Job must be completed before recording on blockchain');
 
-  const { data: existingRecord, error: existingError } = await supabase
-    .from('job_chain_records')
-    .select('id')
-    .eq('job_id', jobId)
-    .maybeSingle();
+    const { data: existingRecord, error: existingError } = await supabase
+      .from('job_chain_records')
+      .select('id')
+      .eq('job_id', jobId)
+      .maybeSingle();
 
-  if (existingError) throw existingError;
-  if (existingRecord) {
-    return { alreadyRecorded: true };
+    if (existingError) throw existingError;
+    if (existingRecord) {
+      return { alreadyRecorded: true };
+    }
+
+    const { data: worker, error: workerError } = await supabase
+      .from('workers')
+      .select('id, name, trust_score')
+      .eq('id', job.worker_id)
+      .maybeSingle();
+
+    if (workerError) throw workerError;
+    if (!worker) throw new Error('Worker not found');
+
+    const { data: completedJobs, error: completedJobsError } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('worker_id', worker.id)
+      .eq('status', 'completed');
+
+    if (completedJobsError) throw completedJobsError;
+
+    const completedJobsCount = Array.isArray(completedJobs) ? completedJobs.length : 0;
+    const trustScoreSnapshot = Number(worker.trust_score) || 0;
+    const recordTimestamp = new Date().toISOString();
+
+    const blockchainHash = generateSHA256RecordHash({
+      jobId: job.id,
+      workerId: worker.id,
+      workerName: worker.name,
+      trustScore: trustScoreSnapshot,
+      timestamp: recordTimestamp,
+    });
+
+    console.log(`Recording blockchain job ${job.id} for worker ${worker.id} with trust score ${trustScoreSnapshot}`);
+
+    const { data: record, error: insertError } = await supabase
+      .from('job_chain_records')
+      .insert({
+        job_id: job.id,
+        worker_id: worker.id,
+        trust_score_snapshot: trustScoreSnapshot,
+        blockchain_hash: blockchainHash,
+        transaction_hash: blockchainHash,
+        created_at: recordTimestamp,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Blockchain record insert failed', insertError);
+      throw insertError;
+    }
+
+    console.log(`Blockchain record inserted with id ${record.id} for job ${job.id}`);
+
+    const passport = await updateWorkerTrustScore(job.worker_id);
+
+    return {
+      success: true,
+      record,
+      passport,
+    };
+  } catch (err) {
+    console.error('recordCompletedJobOnChain failed:', err);
+    throw err;
   }
-
-  const { data: worker, error: workerError } = await supabase
-    .from('workers')
-    .select('id, name, trust_score')
-    .eq('id', job.worker_id)
-    .maybeSingle();
-
-  if (workerError) throw workerError;
-  if (!worker) throw new Error('Worker not found');
-
-  const { data: completedJobs, error: completedJobsError } = await supabase
-    .from('jobs')
-    .select('id')
-    .eq('worker_id', worker.id)
-    .eq('status', 'completed');
-
-  if (completedJobsError) throw completedJobsError;
-
-  const completedJobsCount = Array.isArray(completedJobs) ? completedJobs.length : 0;
-  const trustScoreSnapshot = Number(worker.trust_score) || 0;
-  const recordTimestamp = new Date().toISOString();
-
-  const blockchainHash = generateSHA256RecordHash({
-    jobId: job.id,
-    workerId: worker.id,
-    workerName: worker.name,
-    trustScore: trustScoreSnapshot,
-    completedJobs: completedJobsCount,
-    timestamp: recordTimestamp,
-  });
-
-  console.log(`Recording blockchain job ${job.id} for worker ${worker.id} with trust score ${trustScoreSnapshot}`);
-
-  const { data: record, error: insertError } = await supabase
-    .from('job_chain_records')
-    .insert({
-      job_id: job.id,
-      worker_id: worker.id,
-      trust_score_snapshot: trustScoreSnapshot,
-      blockchain_hash: blockchainHash,
-      transaction_hash: blockchainHash,
-      created_at: recordTimestamp,
-    })
-    .single();
-
-  if (insertError) {
-    console.error('Blockchain record insert failed', insertError);
-    throw insertError;
-  }
-
-  console.log(`Blockchain record inserted with id ${record.id} for job ${job.id}`);
-
-  if (insertError) {
-    throw insertError;
-  }
-
-  const passport = await updateWorkerTrustScore(job.worker_id);
-
-  return {
-    success: true,
-    record,
-    passport,
-  };
 }
 
 async function updateWorkerTrustScore(workerId) {
@@ -102,7 +103,7 @@ async function updateWorkerTrustScore(workerId) {
 
   const { data: worker, error: workerError } = await supabase
     .from('workers')
-    .select('id, average_rating, response_reliability, verification_level, is_verified')
+    .select('id, average_rating, response_rate, verification_level')
     .eq('id', workerId)
     .maybeSingle();
 
@@ -111,17 +112,17 @@ async function updateWorkerTrustScore(workerId) {
 
   const { data: jobs, error: jobsError } = await supabase
     .from('jobs')
-    .select('id, status, dispute_status')
+    .select('id, status')
     .eq('worker_id', workerId);
 
   if (jobsError) throw jobsError;
 
   const totalAssigned = jobs.length;
   const completedJobs = jobs.filter((j) => j.status === 'completed').length;
-  const disputeCount = jobs.filter((j) => j.dispute_status || j.status === 'disputed').length;
+  const disputeCount = jobs.filter((j) => j.status === 'disputed').length;
   const completionRate = totalAssigned > 0 ? completedJobs / totalAssigned : 1;
   const averageRating = Number(worker.average_rating) || 0;
-  const responseReliability = Number(worker.response_reliability) || 1;
+  const responseReliability = Number(worker.response_rate) || 1;
 
   const trustScore = calculateTrustScore({
     averageRating,
@@ -142,11 +143,11 @@ async function updateWorkerTrustScore(workerId) {
     .from('workers')
     .update({
       trust_score: trustScore,
-      total_jobs: completedJobs,
-      dispute_count: disputeCount,
+      completed_jobs: completedJobs,
       blockchain_verified: blockchainVerified,
     })
     .eq('id', workerId)
+    .select()
     .single();
 
   if (updateError) throw updateError;
@@ -168,7 +169,7 @@ async function getWorkerPassport(workerId) {
 
   const { data: worker, error: workerError } = await supabase
     .from('workers')
-    .select('id, name, trust_score, blockchain_verified, verification_level, average_rating, response_reliability, is_verified')
+    .select('id, name, trust_score, blockchain_verified, verification_level, average_rating, response_rate')
     .eq('id', workerId)
     .maybeSingle();
 
@@ -177,20 +178,20 @@ async function getWorkerPassport(workerId) {
 
   const { data: jobs, error: jobsError } = await supabase
     .from('jobs')
-    .select('id, status, dispute_status')
+    .select('id, status')
     .eq('worker_id', workerId);
 
   if (jobsError) throw jobsError;
 
   const totalCompleted = jobs.filter((j) => j.status === 'completed').length;
-  const disputeCount = jobs.filter((j) => j.dispute_status || j.status === 'disputed').length;
+  const disputeCount = jobs.filter((j) => j.status === 'disputed').length;
   const totalAssigned = jobs.length;
   const completionRate = totalAssigned > 0 ? totalCompleted / totalAssigned : 1;
 
   const trustScore = worker.trust_score ?? calculateTrustScore({
     averageRating: Number(worker.average_rating) || 0,
     completionRate,
-    responseReliability: Number(worker.response_reliability) || 1,
+    responseReliability: Number(worker.response_rate) || 1,
     disputeCount,
     totalJobs: totalAssigned,
   });
@@ -210,7 +211,7 @@ async function getWorkerPassport(workerId) {
     total_jobs_completed: totalCompleted,
     average_rating: Number(worker.average_rating) || 0,
     dispute_count: disputeCount,
-    response_reliability: Number(worker.response_reliability) || 1,
+    response_reliability: Number(worker.response_rate) || 1,
     blockchain_records: chainRecords || [],
   };
 }
@@ -241,7 +242,6 @@ async function verifyJobOnChain(jobId) {
     workerId: record.worker_id,
     workerName: worker.name,
     trustScore: Number(record.trust_score_snapshot) || 0,
-    completedJobs: 0,
     timestamp: new Date(record.created_at).toISOString(),
   });
 
