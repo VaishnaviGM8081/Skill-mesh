@@ -132,6 +132,54 @@ const workerController = {
     }
   },
 
+  getLatestCertificate: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const certificateWorkerId = Number(id);
+      if (!certificateWorkerId) {
+        return res.status(400).json({ success: false, error: 'Worker ID is required' });
+      }
+
+      const { data: chainRecord, error: recordError } = await supabase
+        .from('job_chain_records')
+        .select('job_id, worker_id, trust_score_snapshot, blockchain_hash, transaction_hash, created_at')
+        .eq('worker_id', certificateWorkerId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recordError) throw recordError;
+      if (!chainRecord) {
+        return res.status(404).json({ success: false, error: 'No certificate found' });
+      }
+
+      const { data: worker, error: workerError } = await supabase
+        .from('workers')
+        .select('id, name, trade_category, trust_score')
+        .eq('id', certificateWorkerId)
+        .maybeSingle();
+
+      if (workerError) throw workerError;
+      if (!worker) return res.status(404).json({ success: false, error: 'Worker not found' });
+
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('id', chainRecord.job_id)
+        .maybeSingle();
+
+      if (jobError) throw jobError;
+      if (!job) return res.status(404).json({ success: false, error: 'Completed job not found' });
+
+      const { generateWorkerCertificate } = require('../utils/certificateGenerator');
+      const certificate = generateWorkerCertificate(worker, job, chainRecord);
+
+      res.status(200).json({ success: true, certificate });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   // GET /api/workers/earnings — used by DashboardScreen
   getEarnings: async (req, res) => {
     try {

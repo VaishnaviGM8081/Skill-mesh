@@ -1,4 +1,5 @@
 const { getSupabaseAdmin } = require('../config/supabase');
+const { recordCompletedJobOnChain: recordJobOnBlockchain, getWorkerPassport } = require('../utils/blockchainJobRecorder');
 const supabase = getSupabaseAdmin();
 
 const jobController = {
@@ -205,6 +206,15 @@ const jobController = {
         return res.status(400).json({ success: false, error: 'Invalid status' });
       }
 
+      const { data: existingJob, error: existingJobError } = await supabase
+        .from('jobs')
+        .select('id, status')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (existingJobError) throw existingJobError;
+      if (!existingJob) return res.status(404).json({ success: false, error: 'Job not found' });
+
       const { data, error } = await supabase
         .from('jobs')
         .update({ status })
@@ -213,7 +223,25 @@ const jobController = {
         .maybeSingle();
 
       if (error) throw error;
-      res.status(200).json({ success: true, data });
+
+      if (status === 'completed' && existingJob.status !== 'completed') {
+        try {
+          await recordJobOnBlockchain(data.id);
+          console.log(`Blockchain record created for job ${existingJob.id}`);
+        } catch (recordError) {
+          console.error('Blockchain generation failed', recordError);
+        }
+      }
+
+      const responsePayload = { success: true, data };
+      try {
+        const passport = await getWorkerPassport(data.worker_id);
+        responsePayload.certificate = passport.blockchain_records?.[0] || null;
+      } catch (passportError) {
+        console.warn('Worker passport not available after completion', passportError.message || passportError);
+      }
+
+      res.status(200).json(responsePayload);
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }

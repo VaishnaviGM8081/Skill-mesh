@@ -17,6 +17,8 @@ router.post('/skills', authMiddleware, workerController.addSkills);
 
 router.get('/search', workerController.searchWorkers);
 
+router.get('/:id/certificate', authMiddleware, workerController.getLatestCertificate);
+router.get('/:id/certificate/latest', authMiddleware, workerController.getLatestCertificate);
 
 // 🔥 ADD THIS ROUTE
 router.put('/:id/pincode', authMiddleware, async (req, res) => {
